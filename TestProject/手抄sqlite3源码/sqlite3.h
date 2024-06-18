@@ -279,3 +279,4 @@ struct sqlite3_io_methods{
     int (*xFetch)(sqlite3_file*, sqlite3_int64 iOfst, int iAmt, void **pp);
     int (*xUnfetch)(sqlite3_file*, sqlite3_int64 iOfst, void *p);
 };
+
