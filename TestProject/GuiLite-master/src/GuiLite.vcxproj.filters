@@ -1,0 +1,81 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="widgets\widgets.cpp">
+      <Filter>widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="core\adapter\api_win.cpp">
+      <Filter>core\adapter</Filter>
+    </ClCompile>
+    <ClCompile Include="core\core.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="core">
+      <UniqueIdentifier>{90BF9B29-451D-34AC-BF45-13C635ED39CD}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="widgets">
+      <UniqueIdentifier>{338d9696-2a1d-4569-b435-dd3da382a8d2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core\adapter">
+      <UniqueIdentifier>{691801eb-7076-4af6-aa0c-5ce5b0fcb21c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="core\api.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\display.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\image.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\resource.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\theme.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\wnd.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\word.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="widgets\button.h">
+      <Filter>widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="widgets\dialog.h">
+      <Filter>widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="widgets\edit.h">
+      <Filter>widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="widgets\keyboard.h">
+      <Filter>widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="widgets\label.h">
+      <Filter>widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="widgets\list_box.h">
+      <Filter>widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="widgets\slide_group.h">
+      <Filter>widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="widgets\spinbox.h">
+      <Filter>widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="widgets\table.h">
+      <Filter>widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="widgets\wave_buffer.h">
+      <Filter>widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="widgets\wave_ctrl.h">
+      <Filter>widgets</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
