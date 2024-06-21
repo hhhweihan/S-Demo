@@ -1380,3 +1380,692 @@ SQLITE_API int sqlite3_stricmp(const char *, const char *);
 SQLITE_API int sqlite3_strnicmp(const char *, const char *, int);
 
 SQLITE_API int sqlite3_strglob(const char *zGlob, const char *zStr);
+SQLITE_API int sqlite3_strlike(const char *zGlob, const char *zStr, unsigned int cEsc);
+
+SQLITE_API void sqlite3_log(int iErrCode, const char *zFormat, ...);
+
+SQLITE_API void *sqlite3_wal_hook(
+  sqlite3*,
+  int(*)(void*, sqlite3*, const char*, int),
+  void*
+);
+
+SQLITE_API int sqlite3_wal_autocheckpoint(sqlite3 *db, int N);
+
+SQLITE_API int sqlite3_wal_checkpoint(sqlite3 *db, const char *zDb);
+
+SQLITE_API int sqlite3_wal_checkpoint_v2(
+    sqlite3 *db,
+    const char *zDb,
+    int eMode,
+    int *pnLog,
+    int *pnCkpt
+);
+
+#define SQLITE_CHECKPOINT_PASSIVE 0
+#define SQLITE_CHECKPOINT_FULL    1
+#define SQLITE_CHECKPOINT_RESTART 2
+#define SQLITE_CHECKPOINT_TRUNCATE 3
+
+SQLITE_API int sqlite3_vtab_config(sqlite3*, int op, ...);
+
+#define SQLITE_VTAB_CONSTRAINT_SUPPORT 1
+#define SQLITE_VTAB_INNOCUOUS          2
+#define SQLITE_VTAB_DIRECTONLY         3
+#define SQLITE_VTAB_USES_ALL_SCHEMAS   4
+
+SQLITE_API int sqlite3_vtab_on_conflict(sqlite3 *);
+
+SQLITE_API int sqlite3_vtab_nochange(sqlite3_context*);
+
+SQLITE_API const char *sqlite3_vtab_collation(sqlite3_index_info*, int);
+
+SQLITE_API int sqlite3_vtab_distinct(sqlite3_index_info*);
+
+SQLITE_API int sqlite3_vtab_in(sqlite3_index_info*, int iCons, int bHandle);
+
+SQLITE_API int sqlite3_vtab_in_first(sqlite3_value *pVal, sqlite3_value **ppOut);
+SQLITE_API int sqlite3_vtab_in_next(sqlite3_value *pVal, sqlite3_value **ppOut);
+
+SQLITE_API int sqlite3_vtab_rhs_value(sqlite3_index_info*, int, sqlite3_value **ppVal);
+
+#define SQLITE_ROLLBACK 1
+#define SQLITE_FAIL     3
+#define SQLITE_REPLACE  5
+
+#define SQLITE_SCANSTAT_NLOOP    0
+#define SQLITE_SCANSTAT_NVISIT   1
+#define SQLITE_SCANSTAT_EST      2
+#define SQLITE_SCANSTAT_NAME     3
+#define SQLITE_SCANSTAT_EXPLAIN  4
+#define SQLITE_SCANSTAT_SELECTID 5
+#define SQLITE_SCANSTAT_PARENTID 6
+#define SQLITE_SCANSTAT_NCYCLE   7
+
+SQLITE_API int sqlite3_stmt_scanstatus(
+  sqlite3_stmt *pStmt,
+  int idx,
+  int iScanStatusOp,
+  void *pOut
+);
+SQLITE_API int sqlite3_stmt_scanstatus_v2(
+  sqlite3_stmt *pStmt,
+  int idx,
+  int iScanStatusOp,
+  int flags,
+  void *pOut
+);
+#define SQLITE_SCANSTAT_COMPLEX 0x0001
+
+SQLITE_API void sqlite3_stmt_scanstatus_reset(sqlite3_stmt*);
+
+SQLITE_API int sqlite3_db_cacheflush(sqlite3*);
+
+#if defined(SQLITE_ENABLE_PREUPDATE_HOOK)
+SQLITE_API void *sqlite3_preupdate_hook(
+  sqlite3 *db,
+  void(*xPreUpdate)(
+    void *pCtx,
+    sqlite3 *db,
+    int op,
+    char const *zDb,
+    char const *zName,
+    sqlite3_int64 iKey1,
+    sqlite3_int64 iKey2
+  ),
+  void*
+);
+SQLITE_API int sqlite3_preupdate_old(sqlite3*, int, sqlite3_value **);
+SQLITE_API int sqlite3_preupdate_count(sqlite3 *);
+SQLITE_API int sqlite3_preupdate_depth(sqlite3 *);
+SQLITE_API int sqlite3_preupdate_new(sqlite3*, int, sqlite3_value **);
+SQLITE_API int sqlite3_preupdate_blobwrite(sqlite3 *);
+#endif
+
+SQLITE_API int sqlite3_system_errno(sqlite3*);
+
+typedef struct sqlite3_snapshot{
+  unsigned char hidden[48];
+}sqlite3_snapshot;
+
+SQLITE_API SQLITE_EXPERIMENTAL int sqlite3_snapshot_get(
+  sqlite3* db,
+  const char *zSchema,
+  sqlite3_snapshot **ppSnapshot
+);
+
+SQLITE_API SQLITE_EXPERIMENTAL int sqlite3_snapshot_open(
+  sqlite3 *db,
+  const char *zSchema,
+  sqlite3_snapshot *pSnapshot
+);
+
+SQLITE_API SQLITE_EXPERIMENTAL void sqlite3_snapshot_free(sqlite3_snapshot*);
+
+SQLITE_API SQLITE_EXPERIMENTAL int sqlite3_snapshot_cmp(
+  sqlite3_snapshot *p1,
+  sqlite3_snapshot *p2
+);
+
+SQLITE_API SQLITE_EXPERIMENTAL int sqlite3_snapshot_recover(sqlite3 *db, const char *zDb);
+
+SQLITE_API unsigned char *sqlite3_serialize(
+  sqlite3 *db,
+  const char *zSchema,
+  sqlite3_int64 *piSize,
+  unsigned int mFlags
+);
+
+#define SQLITE_SERIALIZE_NOCOPY 0x001
+
+SQLITE_API int sqlite3_deserialize(
+  sqlite3 *db,
+  const char *zSchema,
+  unsigned char *pData,
+  sqlite3_int64 szDb,
+  sqlite3_int64 szBuf,
+  unsigned mFlags
+);
+
+#define SQLITE_DESERIALIZE_FREEONCLOSE    1
+#define SQLITE_DESERIALIZE_RESIZEABLE     2
+#define SQLITE_DESERIALIZE_READONLY       4
+
+#ifdef SQLITE_OMIT_FLOATING_POINT
+#undef double
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+#endif
+
+#ifndef _SQLITE3RTREE_H_
+#define _SQLITE3RTREE_H_
+
+#ifdef __cplusplus
+extern "C"{
+#endif
+
+typedef struct sqlite3_rtree_geometry sqlite3_rtree_geometry;
+typedef struct sqlite3_rtree_query_info sqlite3_rtree_query_info;
+
+#ifdef SQLITE_RTREE_INT_ONLY
+  typedef sqlite3_int64 sqlite3_rtree_dbl;
+#else
+  typedef double sqlite3_rtree_dbl;
+#endif
+
+SQLITE_API int sqlite3_rtree_geometry_callback(
+  sqlite3 *db,
+  const char *zGeom,
+  int (*xGeom)(sqlite3_rtree_geometry*, int, sqlite3_rtree_dbl*, int*),
+  void *pContext
+);
+
+struct sqlite3_rtree_geometry{
+  void *pContext;
+  int nParam;
+  sqlite3_rtree_dbl *aParam;
+  void *pUser;
+  void (*xDelUser)(void *);
+};
+
+SQLITE_API int sqlite3_rtree_query_callback(
+  sqlite3 *db,
+  const char *zQueryFunc,
+  int (*xQueryFunc)(sqlite3_rtree_query_info*);
+  void *pContext,
+  void (*xDestructor)(void*)
+);
+
+struct sqlite3_rtree_query_info {
+  void *pContext;
+  int nParam;
+  sqlite3_rtree_dbl *aParam;
+  void *pUser;
+  void (*xDelUser)(void*);
+  sqlite3_rtree_dbl *aCoord;
+  unsigned int *anQueue;
+  int nCoord;
+  int iLevel;
+  int mxLevel;
+  sqlite3_int64 iRowid; 
+  sqlite3_rtree_dbl rParentScore;
+  int eParentWithin;
+  int eWithin; 
+  sqlite3_rtree_dbl rScore;
+  sqlite3_value **apSqlParam;
+};
+
+#define NOT_WITHIN      0
+#define PARTLY_WITHIN   1
+#define FULLY_WITHIN    2
+
+#ifdef __Cplusplus
+}
+#endif
+
+#endif
+
+#if !defined(__SQLITESESSION_H_) && defined(SQLITE_ENABLE_SESSION)
+#define __SQLITESESSION_H_ 1
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct sqlite3_session sqlite3_session;
+
+#if !defined(__SQLITESESSION_H_) && defined(SQLITE_ENABLE_SESSION)
+#define __SQLITESSION_H_  1
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct sqlite3_session sqlite3_session;
+
+typedef struct sqlite3_changeset_iter sqlite3_changeset_iter;
+
+SQLITE_API int sqlite3session_create(
+  sqlite3 *db,
+  const char *zDb,
+  sqlite3_session **ppSession
+);
+
+SQLITE_API void sqlite3session_delete(sqlite3_session *pSession);
+
+SQLITE_API int sqlite3session_object_config(sqlite3_session*, int op, void *pArg);
+
+#define SQLITE_SESSION_OBJCONFIG_SIZE    1
+#define SQLITE_SESSION_OBJCONFIG_ROWID   2
+
+SQLITE_API int sqlite3session_enable(sqlite3_session *pSession, int bEnable);
+
+SQLITE_API int sqlite3session_indirect(sqlite3_session *pSession, int bIndirect);
+
+SQLITE_API int sqlite3session_attach(
+  sqlite3_session *pSession,
+  const char *zTab
+);
+
+SQLITE_API void sqlite3session_table_filter(
+  sqlite3_session *pSession,
+  int(*xFilter)(
+    void *pCtx,
+    const char *zTab
+  ),
+  void *pCtx
+);
+
+SQLITE_API int sqlite3session_changeset(
+  sqlite3_session *pSession, 
+  int *pnChangeset,
+  void **ppChangeset
+);
+
+SQLITE_API sqlite3_int64 sqlite3session_cahngeset_size(sqlite3_session *pSession);
+
+SQLITE_API int sqlite3session_deff(
+  sqlite3_session *pSession,
+  const char *zFromDb,
+  const char *zTbl,
+  char **pzErrMsg
+);
+
+SQLITE_API int sqlite3session_patchset(
+  sqlite3_session *pSession,
+  int *pnPatchset,
+  void **ppPatchset
+);
+
+SQLITE_API int sqlite3session_isempty(sqlite3_session *pSession);
+
+SQLITE_API sqlite3_int64 sqlite3session_memory_used(sqlite3_session *pSession);
+
+SQLITE_API int sqlite3changeset_start(
+  sqlite3_changeset_iter **pp,
+  int nChangeset,
+  void *pChangeset
+);
+SQLITE_API int sqlite3changeset_start_v2(
+  sqlite3_cahgneset_iter **pp,
+  int nChangeset,
+  void *pChangeset,
+  int flags
+);
+
+#define SQLITE_CHANGESETSTART_INVERT 0x0002
+
+SQLITE_API int sqlite3changeset_next(sqlite3_changeset_iter *pIter);
+
+SQLITE_API int sqlite3chagneset_op(
+  sqlite3_changeset_iter *pIter,
+  const char **pzTab,
+  int *pnCol,
+  int *pOp,
+  int *pbIndirect
+);
+
+SQLITE_API int sqlite3changeset_pk(
+  sqlite3_changeset_iter *pIter,
+  unsigned char **pabPK,
+  int *pnCol
+);
+
+SQLITE_API int sqlite3changeset_old(
+  sqlite3_changeset_iter *pIter,
+  int iVal,
+  sqlite3_value **ppValue
+);
+
+SQLITE_API int sqlite3changeset_new(
+  sqlite3_changeset_iter *pIter,
+  int iVal,
+  sqlite3_value **ppValue
+);
+
+SQLITE_API int sqlite3changeset_conflict(
+  sqlite3_changeset_iter *pIter,
+  int iVal,
+  sqlite3_value **ppValue
+);
+
+SQLITE_API int sqlite3changeset_fk_conflicts(
+  sqlite3_changeset_iter *pIter,
+  int *pnOut
+);
+
+SQLITE_API int sqlite3changeset_finalize(sqlite3_changeset_iter *pIter);
+
+SQLITE_API int sqlite3changeset_invert(
+  int nIn, const void *pIn,
+  int *pnOut, void **ppOut
+);
+
+SQLITE_API int sqlite3changeset_concat(
+  int nA,
+  void *pA,
+  int nB,
+  void *pB,
+  int *pnOut,
+  void **ppOut
+);
+
+SQLITE_API int sqlite3changeset_upgrade(
+  sqlite3 *db,
+  const char *zDb,
+  int nIn, const void *pIn,
+  int *pnOut, void **ppOut
+);
+
+typedef struct sqlite3_changegroup sqlite3_changegroup;
+
+SQLITE_API int sqlite3changegroup_new(sqlite3_changegroup **pp);
+
+SQLITE_API int sqlite3changegroup_schema(sqlite3_changegroup*, sqlite3*, const char *zDb);
+
+SQLITE_API int sqlite3changegroup_add(sqlite3_changegroup*, int nData, void *pData);
+
+SQLITE_API int sqlite3changegroup_output(
+  sqlite3_changegroup*,
+  int *pnData,
+  void **ppData
+);
+
+SQLITE_API void sqlite3changegroup_delete(sqlite3_changegroup*);
+
+SQLITE_API int sqlite3changeset_apply(
+  sqlite3 *db,
+  int nChangeset,
+  void *pChangeset,
+  int(*xFilter)(
+    void *pCtx,
+    const char *zTab
+  ),
+  int(*xConflict)(
+    void *pCtx,
+    const char *zTab
+  ),
+  void *pCtx
+);
+SQLITE_API int sqlite3changeset_apply_v2(
+  sqlite3 *db,
+  int nChangeset,
+  void *pChangeset,
+  int(*xFilter)(
+    void *pCtx,
+    const char *zTab
+  ),
+  int(*xConflict)(
+    void *pCtx,
+    int eConflict,
+    sqlite3_changeset_iter *p
+  ),
+  void *pCtx,
+  void **ppRebase, int *pnRebase,
+  int flags
+);
+
+#define SQLITE_CHANGESETAPPLY_NOSAVEPOINT    0x0001
+#define SQLITE_CHANGESETAPPLY_INVERT         0x0002
+#define SQLITE_CHANGESETAPPLY_IGNORENOOP     0x0004
+#define SQLITE_CHANGESETAPPLY_FKNOACTION     0x0008
+
+#define SQLITE_CHANGESET_DATA      1
+#define SQLITE_CHANGESET_NOTFOUND  2
+#define SQLITE_CHANGESET_CONFLICT  3
+#define SQLITE_CHANGESET_CONSTRAINT  4
+#define SQLITE_CHANGESET_FOREIGN_KEY  5
+
+#define SQLITE_CHANGESET_OMIT    0
+#define SQLITE_CHANGESET_REPLACE  1
+#define SQLITE_CHANGESET_ABORT    2
+
+typedef struct sqlite3_rebaser sqlite3_rebaser;
+
+SQLITE_API int sqlite3rebaser_create(sqlite3_rebaser **ppNew);
+
+SQLITE_API int sqlite3rebaser_configure(
+  sqlite3_rebaser*,
+  int nRebase, const void *pRebase
+);
+
+SQLITE_API int sqlite3rebaser_rebase(
+  sqlite3_rebaser*,
+  int nIn, const void *pIn,
+  int *pnOut, void **ppOut
+);
+
+SQLITE_API void sqlite3rebaser_delete(sqlite3_rebaser *p);
+
+SQLITE_API int sqlite3changeset_apply_strm(
+  sqlite3 *db, 
+  int (*xInput)(void *pIn, void *pData, int *pnData),
+  void *pIn,
+  int(*xFilter)(
+    void *pCtx, 
+    const char *zTab 
+  ),
+  int(*xConflict)(
+    void *pCtx,
+    int eConflict, 
+    sqlite3_changeset_iter *p
+  ),
+  void *pCtx
+};
+
+SQLITE_API int sqlite3changeset_apply_v2_strm(
+  sqlite3 *db,
+  int (*xInput)(void *pIn, void *pData, int *pnData),
+  void *pIn, 
+  int(*xFilter)(
+    void *pCtx,
+    const char *zTab 
+  ),
+  int(*xConflict)(
+    void *pCtx,
+    int eConflict,
+    sqlite3_changeset_iter *p
+  ),
+  void *pCtx,
+  void **ppRebase, int *pnRebase,
+  int flags
+);
+
+SQLITE_API int sqlite3changeset_concat_strm(
+  int (*xInputA)(void *pIn, void *pData, int *pnData),
+  void *pInA,
+  int (*xInputB)(void *pIn, void *pData, int *pnData),
+  void *pInB,
+  int (*xOutput)(void *pOut, const void *pData, int nData),
+  void *pOut
+);
+
+SQLITE_API int sqlite3changeset_invert_strm(
+  int (*xInput)(void *pIn, void *pData, int *pnData),
+  void *pIn,
+  int (*xOutput)(void *pOut, const void *pData, int nData),
+  void *pOut
+);
+
+SQLITE_API int sqlite3changeset_start_strm(
+  sqlite3_changeset_iter **pp,
+  int (*xInput)(void *pIn, void *pData, int *pnData),
+  void *pIn
+);
+
+SQLITE_API int sqlite3changeset_start_v2_strm(
+  sqlite3_changeset_iter **pp,
+  int (*xInput)(void *pIn, void *pData, int *pnData),
+  void *pIn,
+  int flags
+);
+
+SQLITE_API int sqlite3session_changeset_strm(
+  sqlite3_session *pSession,
+  int (*xOutput)(void *pOut, const void *pData, int nData),
+  void *pOut
+);
+
+SQLITE_API int sqlite3session_patchset_strm(
+  sqlite3_session *pSession,
+  int (*xOutput)(void *pOut, const void *pData, int nData),
+  void *pOut
+);
+
+SQLITE_API int sqlite3changegroup_add_strm(sqlite3_changegroup*,
+    int (*xInput)(void *pIn, void *pData, int *pnData),
+    void *pIn
+);
+
+SQLITE_API int sqlite3changegroup_output_strm(sqlite3_changegroup*,
+    int (*xOutput)(void *pOut, const void *pData, int nData),
+    void *pOut
+);
+
+SQLITE_API int sqlite3rebaser_rebase_strm(
+  sqlite3_rebaser *pRebaser,
+  int (*xInput)(void *pIn, void *pData, int *pnData),
+  void *pIn,
+  int (*xOutput)(void *pOut, const void *pData, int nData),
+  void *pOut
+);
+
+SQLITE_API int sqlite3session_config(int op, void *pArg);
+
+#define SQLITE_SESSION_CONFIG_STRMSIZE 1
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
+
+#ifndef _FTSS_H
+#define _FTSS_H
+
+#ifdef __Cplusplus
+extern "C" {
+#endif
+
+typedef struct Fts5ExtensionApi Fts5ExtensionApi;
+typedef struct Fts5Context Fts5Context;
+typedef struct Fts5PhraseIter Fts5PhraseIter;
+
+typedef void(*fts5_extension_function)(
+  const Fts5ExtensionApi *pApi,
+  Fts5Context *pFts,
+  sqlite3_context *pCtx,
+  int nVal,
+  sqlite3_value **apVal
+);
+
+struct Fts5PhraseIter{
+  const unsigned char *a;
+  const unsigned char *b;
+};
+
+struct Fts5ExtensionApi {
+  int iVersion;
+  void *(*xUserData)(Fts5Context*);
+
+  int (*xColumnCount)(Fts5Context*);
+  int (*xRowCount)(Fts5Context*, sqlite3_int64 *pnRow);
+  int (*xColumnTotalSize)(Fts5Context*, int iCol, sqlite3_int64 *pnToken);
+
+  int (*xTokenize)(Fts5Context*,
+    const char *pText, int nText, /* Text to tokenize */
+    void *pCtx,                   /* Context passed to xToken() */
+    int (*xToken)(void*, int, const char*, int, int, int)       /* Callback */
+  );
+
+  int (*xPhraseCount)(Fts5Context*);
+  int (*xPhraseSize)(Fts5Context*, int iPhrase);
+
+  int (*xInstCount)(Fts5Context*, int *pnInst);
+  int (*xInst)(Fts5Context*, int iIdx, int *piPhrase, int *piCol, int *piOff);
+
+  sqlite3_int64 (*xRowid)(Fts5Context*);
+  int (*xColumnText)(Fts5Context*, int iCol, const char **pz, int *pn);
+  int (*xColumnSize)(Fts5Context*, int iCol, int *pnToken);
+
+  int (*xQueryPhrase)(Fts5Context*, int iPhrase, void *pUserData,
+    int(*)(const Fts5ExtensionApi*,Fts5Context*,void*)
+  );
+  int (*xSetAuxdata)(Fts5Context*, void *pAux, void(*xDelete)(void*));
+  void *(*xGetAuxdata)(Fts5Context*, int bClear);
+
+  int (*xPhraseFirst)(Fts5Context*, int iPhrase, Fts5PhraseIter*, int*, int*);
+  void (*xPhraseNext)(Fts5Context*, Fts5PhraseIter*, int *piCol, int *piOff);
+
+  int (*xPhraseFirstColumn)(Fts5Context*, int iPhrase, Fts5PhraseIter*, int*);
+  void (*xPhraseNextColumn)(Fts5Context*, Fts5PhraseIter*, int *piCol);
+
+  int (*xQueryToken)(Fts5Context*,
+      int iPhrase, int iToken,
+      const char **ppToken, int *pnToken
+  );
+  int (*xInstToken)(Fts5Context*, int iIdx, int iToken, const char**, int*);
+};
+
+typedef struct Fts5Tokenizer Fts5Tokenizer;
+typedef struct fts5_tokenizer fts5_tokenizer;
+struct fts5_tokenizer {
+  int (*xCreate)(void*, const char **azArg, int nArg, Fts5Tokenizer **ppOut);
+  void (*xDelete)(Fts5Tokenizer*);
+  int (*xTokenize)(Fts5Tokenizer*,
+      void *pCtx,
+      int flags,            /* Mask of FTS5_TOKENIZE_* flags */
+      const char *pText, int nText,
+      int (*xToken)(
+        void *pCtx,         /* Copy of 2nd argument to xTokenize() */
+        int tflags,         /* Mask of FTS5_TOKEN_* flags */
+        const char *pToken, /* Pointer to buffer containing token */
+        int nToken,         /* Size of token in bytes */
+        int iStart,         /* Byte offset of token within input text */
+        int iEnd            /* Byte offset of end of token within input text */
+      )
+  );
+};
+
+#define FTS5_TOKENIZE_QUERY     0x0001
+#define FTS5_TOKENIZE_PREFIX    0x0002
+#define FTS5_TOKENIZE_DOCUMENT  0x0004
+#define FTS5_TOKENIZE_AUX       0x0008
+
+#define FTS5_TOKEN_COLOCATED    0x0001
+
+typedef struct fts5_api fts5_api;
+struct fts5_api{
+  int iVersion;
+
+  int (*xCreateTokenizer)(
+    fts5_api *pApi;
+    const char *zName,
+    void *pUserData,
+    fts5_tokenizer *pTokenizer,
+    void (*xDestroy)(void*)
+  );
+
+  int(*xFindTokenizer)(
+    fts5_api *pApi,
+    const char *zName,
+    void **ppUserData,
+    fts5_tokenizer *pTokenizer
+  );
+
+  int (*xCreateFunction)(
+    fts5_api *pApi,
+    const char *zName,
+    void *pUserData,
+    fts5_extension_function xFunction,
+    void (*xDestroy)(void*)
+  );
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
