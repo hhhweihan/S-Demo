@@ -960,3 +960,89 @@ struct rusage {
 #define getrusage(A,B) memset(B,0,sizeof(*B))
 #endif
 
+static struct rusage sBegin;
+static sqlite3_int64 iBegin;
+
+static void beginTimer(void){
+  if( enableTimer ){
+    getrusage(RUSAGE_SELF, &sBegin);
+    iBegin = timeOfDay();
+  }
+}
+
+static double timeDiff(struct timeVal *pStart, struct timeVal *pEnd){
+    return (pEnd->tv_usec - pStart->tv_usec)*0.000001 + (double)(pEnd->tv_sec - pStart->tv_sec);
+}
+
+static void endTimer(void){
+    if(enableTimer){
+        sqlite3_int64 iEnd = timeOfDay();
+        struct rusage sEnd;
+        getrusage(RUSAGE_SELF, &sEnd);
+        sputf(stdout, "RunTime: real %.3f user %f sys %f\n",
+            (iEnd - iBegin) * 0.001,
+            timeDiff(&sBegin.ru_utime, &sEnd.ru_utime),
+            timeDiff(&sBegin.ru_stime, &sEnd.ru_stime));
+    }
+}
+
+#define BEGIN_TIMER beginTimer()
+#define END_TIMER endTimer()
+#define HAS_TIMER 1
+
+#elif (defined(_WIN32) || defined(WIN32))
+
+static HANDLE hProcess;
+static FILETIME ftKernelBegin;
+static FILETIME ftUserBegin;
+static sqlite3_int64 ftWallBegin;
+typedef BOOL(WINAPI *GETPROCTIMES)(HANDLE, LPFILETIME, LPFILETIME,
+                                    LPFILETIME, LPFILETIME);
+static int hasTimer(void){
+    if(getProcessTimesAddr){
+        return 1;
+    }else{
+    #if !SQLITE_OS_WINRT
+        hProcess = GetCurrentProcess();
+        if(hProcess){
+            HINSTANCE hinstLib = LoadLibrary(TEXT("Kernel32.dll"));
+            if(NULL != hinstLib){
+                getProcessTimesAddr = 
+                    (GETPROCETIMES) GetProcAddress(hinstLib, "GetProcessTimes");
+            if(NULL != getProcessTimesAddr){
+                return 1;
+            }
+            FreeLibrary(hinstLib);
+            }
+        }
+    #endif
+    }
+    return 0;
+}
+
+static void beginTimer(void){
+    if(enableTimer && getProcessTimesAddr){
+        FILETIME ftCreation, ftExit;
+        getProcessTimesAddr(hProcess,&ftCreation,&ftExit,
+                            &ftKernelBegin,&ftUserBegin);
+        ftWallBegin = timeOfDay();
+    }
+}
+
+static double timeDiff(FILETIME *pStart, FILETIME *pEnd){
+    sqlite_int64 i64Start = *((sqlite_int64 *) pStart);
+    sqlite_int64 i64End = *((sqlite_int64 *) pEnd);
+    return (double)((i64End - i64Start) / 10000000.0);
+}
+
+static void endTimer(void){
+    if(enableTimer && getProcessTimesAddr){
+        FILETIME ftCreation, ftExit, ftKernelEnd, ftUserEnd;
+        sqlite3_int64 ftWallEnd = timeOfDay();
+        getProcessTimesAddr(hProcess, &ftCreation, &ftExit, &ftKernelEnd, &ftUserEnd);
+        sputf(stdout, "Run Time: real %.3f user %f sys %f\n",
+            (ftWallEnd - ftWallBegin)*0.001,
+            timeDiff(&ftUserBegin, &ftUserEnd),
+            timeDiff(&ftKernelBegin, &ftKernelEnd));
+    }
+}
