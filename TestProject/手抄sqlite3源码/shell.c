@@ -1046,3 +1046,168 @@ static void endTimer(void){
             timeDiff(&ftKernelBegin, &ftKernelEnd));
     }
 }
+
+#define BEGIN_TIMER beginTimer()
+#define END_TIMER endTimer()
+#define HAS_TIMER hasTimer()
+
+#else
+#define BEGIN_TIMER
+#define END_TIMER
+#define HAS_TIMER 0
+#endif
+
+#define UNUSED_PARAMETER(x) (void)(x)
+
+#define ArraySize(X) (int)(sizeof(X)/sizeof(X[0]))
+
+static int bail_on_error = 0;
+
+static int stdin_is_interactive = 1;
+
+static int stdout_is_console = 1;
+
+static sqlite3 *globalDb = 0;
+
+static volatile int seenInterrupt = 0;
+
+static char *Argv0;
+
+#define PROMPT_LEN_MAX 20
+
+static char mainPrompt[PROMPT_LEN_MAX];
+
+static char continuePrompt[PROMPT_LEN_MAX];
+
+static char *shell_strncpy(char *dest, const char *src, size_t n){
+    size_t i;
+    for(i = 0; i < n-1 && src[i]!=0; ++i) dest[i] = src[i];
+    dest[i] = 0;
+    return dest;
+}
+
+#ifdef SQLITE_OMIT_DYNAPROMPT
+# define CONTINUATION_PROMPT continuePrompt
+# define CONTINUE_PROMPT_RESET
+# define CONTINUE_PROMPT_AWAITS(p,s)
+# define CONTINUE_PROMPT_AWAITC(p,c)
+# define CONTINUE_PAREN_INCR(p,n)
+# define CONTINUE_PROMPT_PSTATE 0
+typedef void *t_NoDynaPrompt;
+# define SCAN_TRACKER_REFTYPE t_NoDynaPrompt
+#else
+# define CONTINUATION_PROMPT dynamicContinuePrompt()
+# define CONTINUE_PROMPT_RESET \
+  do {setLexemeOpen(&dynPrompt,0,0); trackParenLevel(&dynPrompt,0);} while(0)
+# define CONTINUE_PROMPT_AWAITS(p,s) \
+  if(p && stdin_is_interactive) setLexemeOpen(p, s, 0)
+# define CONTINUE_PROMPT_AWAITC(p,c) \
+  if(p && stdin_is_interactive) setLexemeOpen(p, 0, c)
+# define CONTINUE_PAREN_INCR(p,n) \
+  if(p && stdin_is_interactive) (trackParenLevel(p,n))
+# define CONTINUE_PROMPT_PSTATE (&dynPrompt)
+typedef struct DynaPrompt *t_DynaPromptRef;
+# define SCAN_TRACKER_REFTYPE t_DynaPromptRef
+
+static struct DynaPrompt{
+    char dynamicPrompt[PROMPT_LEN_MAX];
+    char acAwait[2];
+    int inParenLevel;
+    char *zScannerAwaits;
+}DynaPrompt = {{0}, {0}, 0, 0};
+
+static void trackParenLevel(struct DynaPrompt *p, int ni){
+    p->inParenLevel += ni;
+    if(ni == 0) p->inParenLevel = 0;
+    p->zScannerAwaits = 0;
+}
+
+static void setLexemeOpen(struct DynaPrompt *p, char *s, char c){
+    if(s != 0 || c == 0){
+        p->zScannerAwaits = s;
+        p->acAwait[0] = 0;
+    }else{
+        p->acAwait[0] = c;
+        p->zScannerAwaits = p->acAwait;
+    }
+}
+
+static char *dynamicContinuePrompt(void){
+    if(continuePrompt[0] == 0 
+    || (dynPrompt.zScannerAwaits == 0 && dynPrompt.inParenLevel == 0)){
+        return continuePrompt;
+    }else{
+        if( dynPrompt.zScannerAwaits ){
+      size_t ncp = strlen(continuePrompt);
+      size_t ndp = strlen(dynPrompt.zScannerAwaits);
+      if( ndp > ncp-3 ) return continuePrompt;
+      strcpy(dynPrompt.dynamicPrompt, dynPrompt.zScannerAwaits);
+      while( ndp<3 ) dynPrompt.dynamicPrompt[ndp++] = ' ';
+      shell_strncpy(dynPrompt.dynamicPrompt+3, continuePrompt+3,
+              PROMPT_LEN_MAX-4);
+    }else{
+      if( dynPrompt.inParenLevel>9 ){
+        shell_strncpy(dynPrompt.dynamicPrompt, "(..", 4);
+      }else if( dynPrompt.inParenLevel<0 ){
+        shell_strncpy(dynPrompt.dynamicPrompt, ")x!", 4);
+      }else{
+        shell_strncpy(dynPrompt.dynamicPrompt, "(x.", 4);
+        dynPrompt.dynamicPrompt[2] = (char)('0'+dynPrompt.inParenLevel);
+      }
+      shell_strncpy(dynPrompt.dynamicPrompt+3, continuePrompt+3,
+                    PROMPT_LEN_MAX-4);
+    }
+    }
+    return dynPrompt.dynamicPrompt;
+}
+#endif
+
+static void shell_out_of_memory(void){
+    eputz("Error: out of memory\n");
+    exit(1);
+}
+
+static void shell_check_oom(const void *p){
+    if(p == 0) shell_out_of_memory();
+}
+
+#ifndef SQLITE_ENABLE_IOTRACE
+static FILE *iotrace = 0;
+#endif
+
+#ifdef SQLITE_ENABLE_IOTRACE
+static void SQLITE_CDECL iotracePrintf(const char*zFormat, ...){
+    va_list ap;
+    char *z;
+    if(iotrace == 0) return;
+    va_start(ap, zFormat);
+    z = sqlite3_vmprintf(zFormat, ap);
+    va_end(ap);
+    sputf(iotrace,"%s", z);
+    sqlite3_free(z);
+}
+#endif
+
+static void utf8_width_print(int w, const char *zUtf){
+    int i;
+    int n;
+    int aw = w<0?-w:w;
+    if( zUtf==0 ) zUtf = "";
+    for(i=n=0; zUtf[i]; i++){
+        if( (zUtf[i]&0xc0)!=0x80 ){
+        n++;
+        if( n==aw ){
+            do{ i++; }while( (zUtf[i]&0xc0)==0x80 );
+            break;
+        }
+        }
+    }
+    if( n>=aw ){
+        oputf("%.*s", i, zUtf);
+    }else if( w<0 ){
+        oputf("%*s%s", aw-n, "", zUtf);
+    }else{
+        oputf("%s%*s", zUtf, aw-n, "");
+    }
+}
+
