@@ -3191,5 +3191,401 @@ static Decimal *decimalPow2(int N){
   if(N < -20000 || N > 20000) goto pow2_fault;
   pA = decimalNewFromText("1.0", 3);
   if(pA == 0 || pA->oom) goto pow2_fault;
-  
+  if( N==0 ) return pA;
+  if( N>0 ){
+    pX = decimalNewFromText("2.0", 3);
+  }else{
+    N = -N;
+    pX = decimalNewFromText("0.5", 3);
+  }
+  if( pX==0 || pX->oom ) goto pow2_fault;
+  while( 1 /* Exit by break */ ){
+    if( N & 1 ){
+      decimalMul(pA, pX);
+      if( pA->oom ) goto pow2_fault;
+    }
+    N >>= 1;
+    if( N==0 ) break;
+    decimalMul(pX, pX);
+  }
+  decimal_free(pX);
+  return pA;
+
+pow2_fault:
+  decimal_free(pA);
+  decimal_free(pX);
+  return 0;
+}
+
+static Decimal *decimalFormDouble(double r){
+  sqlite3_int64 m, a;
+  int e;
+  int isNeg;
+  Decimal *pA;
+  Deciaml *pX;
+  char zNum[100];
+  if( r<0.0 ){
+    isNeg = 1;
+    r = -r;
+  }else{
+    isNeg = 0;
+  }
+  memcpy(&a,&r,sizeof(a));
+  if( a==0 ){
+    e = 0;
+    m = 0;
+  }else{
+    e = a>>52;
+    m = a & ((((sqlite3_int64)1)<<52)-1);
+    if( e==0 ){
+      m <<= 1;
+    }else{
+      m |= ((sqlite3_int64)1)<<52;
+    }
+    while( e<1075 && m>0 && (m&1)==0 ){
+      m >>= 1;
+      e++;
+    }
+    if( isNeg ) m = -m;
+    e = e - 1075;
+    if( e>971 ){
+      return 0;  /* A NaN or an Infinity */
+    }
+  }
+
+  /* At this point m is the integer significand and e is the exponent */
+  sqlite3_snprintf(sizeof(zNum), zNum, "%lld", m);
+  pA = decimalNewFromText(zNum, (int)strlen(zNum));
+  pX = decimalPow2(e);
+  decimalMul(pA, pX);
+  decimal_free(pX);
+  return pA;
+}
+}
+
+static void decimalFunc(
+  sqlite3_context *context,
+  int argc,
+  sqlite3_value **argv
+){
+  Decimal *p =  decimal_new(context, argv[0], 0);
+  UNUSED_PARAMETER(argc);
+  if( p ){
+    if( sqlite3_user_data(context)!=0 ){
+      decimal_result_sci(context, p);
+    }else{
+      decimal_result(context, p);
+    }
+    decimal_free(p);
+  }
+}
+
+static int decimalCollFunc(
+  void *notUsed,
+  int nKey1, const void *pKey1,
+  int nKey2, const void *pKey2
+){
+  const unsigned char *zA = (const unsigned char*)pKey1;
+  const unsigned char *zB = (const unsigned char*)pKey2;
+  Decimal *pA = decimalNewFromText((const char*)zA, nKey1);
+  Decimal *pB = decimalNewFromText((const char*)zB, nKey2);
+  int rc;
+  UNUSED_PARAMETER(notUsed);
+  if( pA==0 || pB==0 ){
+    rc = 0;
+  }else{
+    rc = decimal_cmp(pA, pB);
+  }
+  decimal_free(pA);
+  decimal_free(pB);
+  return rc;
+}
+
+static void decimalAddFunc(
+  sqlite3_context *context,
+  int argc,
+  sqlite3_value **argv
+){
+  Decimal *pA = decimal_new(context, argv[0], 1);
+  Decimal *pB = decimal_new(context, argv[1], 1);
+  UNUSED_PARAMETER(argc);
+  decimal_add(pA, pB);
+  decimal_result(context, pA);
+  decimal_free(pA);
+  decimal_free(pB);
+}
+static void decimalSubFunc(
+  sqlite3_context *context,
+  int argc,
+  sqlite3_value **argv
+){
+  Decimal *pA = decimal_new(context, argv[0], 1);
+  Decimal *pB = decimal_new(context, argv[1], 1);
+  UNUSED_PARAMETER(argc);
+  if( pB ){
+    pB->sign = !pB->sign;
+    decimal_add(pA, pB);
+    decimal_result(context, pA);
+  }
+  decimal_free(pA);
+  decimal_free(pB);
+}
+
+static void decimalSumStep(
+  sqlite3_context *context,
+  int argc,
+  sqlite3_value **argv
+){
+  Decimal *p;
+  Decimal *pArg;
+  UNUSED_PARAMETER(argc);
+  p = sqlite3_aggregate_context(context, sizeof(*p));
+  if( p==0 ) return;
+  if( !p->isInit ){
+    p->isInit = 1;
+    p->a = sqlite3_malloc(2);
+    if( p->a==0 ){
+      p->oom = 1;
+    }else{
+      p->a[0] = 0;
+    }
+    p->nDigit = 1;
+    p->nFrac = 0;
+  }
+  if( sqlite3_value_type(argv[0])==SQLITE_NULL ) return;
+  pArg = decimal_new(context, argv[0], 1);
+  decimal_add(p, pArg);
+  decimal_free(pArg);
+}
+
+static void decimalSumInverse(
+  sqlite3_context *context,
+  int argc,
+  sqlite3_value **argv
+){
+  Decimal *p;
+  Decimal *pArg;
+  UNUSED_PARAMETER(argc);
+  p = sqlite3_aggregate_context(context, sizeof(*p));
+  if( p==0 ) return;
+  if( sqlite3_value_type(argv[0])==SQLITE_NULL ) return;
+  pArg = decimal_new(context, argv[0], 1);
+  if( pArg ) pArg->sign = !pArg->sign;
+  decimal_add(p, pArg);
+  decimal_free(pArg);
+}
+static void decimalSumValue(sqlite3_context *context){
+  Decimal *p = sqlite3_aggregate_context(context, 0);
+  if( p==0 ) return;
+  decimal_result(context, p);
+}
+static void decimalSumFinalize(sqlite3_context *context){
+  Decimal *p = sqlite3_aggregate_context(context, 0);
+  if( p==0 ) return;
+  decimal_result(context, p);
+  decimal_clear(p);
+}
+
+static void decimalPow2Func(
+  sqlite3_context *context,
+  int argc,
+  sqlite3_value **argv
+){
+  UNUSED_PARAMETER(argc);
+  if( sqlite3_value_type(argv[0])==SQLITE_INTEGER ){
+    Decimal *pA = decimalPow2(sqlite3_value_int(argv[0]));
+    decimal_result_sci(context, pA);
+    decimal_free(pA);
+  }
+}
+
+#ifdef _WIN32
+
+#endif
+int sqlite3_decimal_init(
+  sqlite3 *db, 
+  char **pzErrMsg, 
+  const sqlite3_api_routines *pApi
+){
+  int rc = SQLITE_OK;
+  static const struct {
+    const char *zFuncName;
+    int nArg;
+    int iArg;
+    void (*xFunc)(sqlite3_context*,int,sqlite3_value**);
+  } aFunc[] = {
+    { "decimal",       1, 0,  decimalFunc        },
+    { "decimal_exp",   1, 1,  decimalFunc        },
+    { "decimal_cmp",   2, 0,  decimalCmpFunc     },
+    { "decimal_add",   2, 0,  decimalAddFunc     },
+    { "decimal_sub",   2, 0,  decimalSubFunc     },
+    { "decimal_mul",   2, 0,  decimalMulFunc     },
+    { "decimal_pow2",  1, 0,  decimalPow2Func    },
+  };
+  unsigned int i;
+  (void)pzErrMsg;  /* Unused parameter */
+
+  SQLITE_EXTENSION_INIT2(pApi);
+
+  for(i=0; i<(int)(sizeof(aFunc)/sizeof(aFunc[0])) && rc==SQLITE_OK; i++){
+    rc = sqlite3_create_function(db, aFunc[i].zFuncName, aFunc[i].nArg,
+                   SQLITE_UTF8|SQLITE_INNOCUOUS|SQLITE_DETERMINISTIC,
+                   aFunc[i].iArg ? db : 0, aFunc[i].xFunc, 0, 0);
+  }
+  if( rc==SQLITE_OK ){
+    rc = sqlite3_create_window_function(db, "decimal_sum", 1,
+                   SQLITE_UTF8|SQLITE_INNOCUOUS|SQLITE_DETERMINISTIC, 0,
+                   decimalSumStep, decimalSumFinalize,
+                   decimalSumValue, decimalSumInverse, 0);
+  }
+  if( rc==SQLITE_OK ){
+    rc = sqlite3_create_collation(db, "decimal", SQLITE_UTF8,
+                                  0, decimalCollFunc);
+  }
+  return rc;
+}
+#undef sqlite3_base_init
+#define sqlite3_base_init sqlite3_base64_init
+
+
+#include <assert.h>
+
+#ifndef deliberate_fall_through
+
+# if GCC_VERSION>=7000000
+#  define deliberate_fall_through __attribute__((fallthrough));
+# else
+#  define deliberate_fall_through
+# endif
+#endif
+
+
+SQLITE_EXTENSION_INIT1;
+
+#define PC 0x80
+#define WS 0x81
+#define ND 0x82
+#define PAD_CHAR '='
+
+#ifndef U8_TYPEDEF
+
+#define U8_TYPEDEF
+#endif
+
+static const u8 b64DigitValues[128] = {
+  /*                             HT LF VT  FF CR       */
+    ND,ND,ND,ND, ND,ND,ND,ND, ND,WS,WS,WS, WS,WS,ND,ND,
+  /*                                                US */
+    ND,ND,ND,ND, ND,ND,ND,ND, ND,ND,ND,ND, ND,ND,ND,ND,
+  /*sp                                  +            / */
+    WS,ND,ND,ND, ND,ND,ND,ND, ND,ND,ND,62, ND,ND,ND,63,
+  /* 0  1            5            9            =       */
+    52,53,54,55, 56,57,58,59, 60,61,ND,ND, ND,PC,ND,ND,
+  /*    A                                            O */
+    ND, 0, 1, 2,  3, 4, 5, 6,  7, 8, 9,10, 11,12,13,14,
+  /* P                               Z                 */
+    15,16,17,18, 19,20,21,22, 23,24,25,ND, ND,ND,ND,ND,
+  /*    a                                            o */
+    ND,26,27,28, 29,30,31,32, 33,34,35,36, 37,38,39,40,
+  /* p                               z                 */
+    41,42,43,44, 45,46,47,48, 49,50,51,ND, ND,ND,ND,ND
+};
+
+static const char b64Numerals[64+1]
+= "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+#define BX_DV_PROTO(c) \
+  ((((u8)(c))<0x80)? (u8)(b64DigitValues[(u8)(c)]) : 0x80)
+#define IS_BX_DIGIT(bdp) (((u8)(bdp))<0x80)
+#define IS_BX_WS(bdp) ((bdp)==WS)
+#define IS_BX_PAD(bdp) ((bdp)==PC)
+#define BX_NUMERAL(dv) (b64Numerals[(u8)(dv)])
+/* Width of base64 lines. Should be an integer multiple of 4. */
+#define B64_DARK_MAX 72
+
+static char* toBase64( u8 *pIn, int nbIn, char *pOut ){
+  int nCol = 0;
+  while( nbIn >= 3 ){
+    /* Do the bit-shuffle, exploiting unsigned input to avoid masking. */
+    pOut[0] = BX_NUMERAL(pIn[0]>>2);
+    pOut[1] = BX_NUMERAL(((pIn[0]<<4)|(pIn[1]>>4))&0x3f);
+    pOut[2] = BX_NUMERAL(((pIn[1]&0xf)<<2)|(pIn[2]>>6));
+    pOut[3] = BX_NUMERAL(pIn[2]&0x3f);
+    pOut += 4;
+    nbIn -= 3;
+    pIn += 3;
+    if( (nCol += 4)>=B64_DARK_MAX || nbIn<=0 ){
+      *pOut++ = '\n';
+      nCol = 0;
+    }
+  }
+  if( nbIn > 0 ){
+    signed char nco = nbIn+1;
+    int nbe;
+    unsigned long qv = *pIn++;
+    for( nbe=1; nbe<3; ++nbe ){
+      qv <<= 8;
+      if( nbe<nbIn ) qv |= *pIn++;
+    }
+    for( nbe=3; nbe>=0; --nbe ){
+      char ce = (nbe<nco)? BX_NUMERAL((u8)(qv & 0x3f)) : PAD_CHAR;
+      qv >>= 6;
+      pOut[nbe] = ce;
+    }
+    pOut += 4;
+    *pOut++ = '\n';
+  }
+  *pOut = 0;
+  return pOut;
+}
+
+static char * skipNonB64( char *s, int nc ){
+  char c;
+  while( nc-- > 0 && (c = *s) && !IS_BX_DIGIT(BX_DV_PROTO(c)) ) ++s;
+  return s;
+}
+
+static u8* fromBase64( char *pIn, int ncIn, u8 *pOut ){
+  if( ncIn>0 && pIn[ncIn-1]=='\n' ) --ncIn;
+  while( ncIn>0 && *pIn!=PAD_CHAR ){
+    static signed char nboi[] = { 0, 0, 1, 2, 3 };
+    char *pUse = skipNonB64(pIn, ncIn);
+    unsigned long qv = 0L;
+    int nti, nbo, nac;
+    ncIn -= (pUse - pIn);
+    pIn = pUse;
+    nti = (ncIn>4)? 4 : ncIn;
+    ncIn -= nti;
+    nbo = nboi[nti];
+    if( nbo==0 ) break;
+    for( nac=0; nac<4; ++nac ){
+      char c = (nac<nti)? *pIn++ : b64Numerals[0];
+      u8 bdp = BX_DV_PROTO(c);
+      switch( bdp ){
+      case ND:
+        ncIn = 0;
+        deliverate_fall_through;
+      case WS:
+        nti = nac;
+        deliberate_fall_through;
+      case PC:
+        bdp = 0;
+        --nbo;
+        deliberate_fall_through;
+      default:
+        qv = qv<<6 | bdp;
+        break;
+      }
+    }
+    switch( nbo ){
+    case 3:
+      pOut[2] = (qv) & 0xff;
+    case 2:
+      pOut[1] = (qv>>8) & 0xff;
+    case 1:
+      pOut[0] = (qv>>16) & 0xff;
+    }
+    pOut += nbo;
+  }
+  return pOut;
 }
