@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "D:/Temp/S-Demo/TestProject/GuiLite-master/src"
+    "cmake.sourceDirectory": "D:/Temp/S-Demo/TestProject/GuiLite-master/src",
+    "cmake.ignoreCMakeListsMissing": true
 }
