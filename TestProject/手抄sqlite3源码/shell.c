@@ -3589,3 +3589,240 @@ static u8* fromBase64( char *pIn, int ncIn, u8 *pOut ){
   }
   return pOut;
 }
+
+static void base64(sqlite3_context *context, int na, sqlite3_value *av[]){
+  int nb, nc, nv = sqlite3_value_bytes(av[0]);
+  int nvMax = sqlite3_limit(sqlite3_context_db_handle(context),SQLITE_LIMIT_LENGTH,-1);
+  char *cBuf;
+  u8 *bBuf;
+  assert(na == 1);
+   switch( sqlite3_value_type(av[0]) ){
+  case SQLITE_BLOB:
+    nb = nv;
+    nc = 4*(nv+2/3); /* quads needed */
+    nc += (nc+(B64_DARK_MAX-1))/B64_DARK_MAX + 1; /* LFs and a 0-terminator */
+    if( nvMax < nc ){
+      sqlite3_result_error(context, "blob expanded to base64 too big", -1);
+      return;
+    }
+    bBuf = (u8*)sqlite3_value_blob(av[0]);
+    if( !bBuf ){
+      if( SQLITE_NOMEM==sqlite3_errcode(sqlite3_context_db_handle(context)) ){
+        goto memFail;
+      }
+      sqlite3_result_text(context,"",-1,SQLITE_STATIC);
+      break;
+    }
+       cBuf = sqlite3_malloc(nc);
+    if( !cBuf ) goto memFail;
+    nc = (int)(toBase64(bBuf, nb, cBuf) - cBuf);
+    sqlite3_result_text(context, cBuf, nc, sqlite3_free);
+    break;
+  case SQLITE_TEXT:
+    nc = nv;
+    nb = 3*((nv+3)/4); /* may overestimate due to LF and padding */
+    if( nvMax < nb ){
+      sqlite3_result_error(context, "blob from base64 may be too big", -1);
+      return;
+    }else if( nb<1 ){
+      nb = 1;
+    }
+    cBuf = (char *)sqlite3_value_text(av[0]);
+    if( !cBuf ){
+      if( SQLITE_NOMEM==sqlite3_errcode(sqlite3_context_db_handle(context)) ){
+        goto memFail;
+      }
+      sqlite3_result_zeroblob(context, 0);
+      break;
+    }
+    bBuf = sqlite3_malloc(nb);
+    if( !bBuf ) goto memFail;
+    nb = (int)(fromBase64(cBuf, nc, bBuf) - bBuf);
+    sqlite3_result_blob(context, bBuf, nb, sqlite3_free);
+    break;
+  default:
+    sqlite3_result_error(context, "base64 accepts only blob or text", -1);
+    return;
+    }
+  return;
+memFail:
+  sqlite3_result_error(context, "base64 OOM", -1);
+}
+
+#ifndef SQLITE_SHELL_EXTFUNCS
+#ifdef _WIN32
+
+#endif
+int sqlite3_base_init
+#else
+static int sqlite3_base64_init
+#endif
+(sqlite3 *db, char **pzErr, const sqlite3_api_routines *pApi){
+  SQLITE_EXTENSION_INIT2(pApi);
+  (void)pzErr;
+  return sqlite3_create_function
+    (db, "base64", 1,
+    SQLITE_DETERMINISTIC|SQLITE_INNOCUOUS|SQLITE_DIRECTONLY|SQLITE_UTF8,
+    0, base64, 0, 0);
+}
+
+#define BASE64_INIT(db) sqlite3_base64_init(db, 0, 0)
+#define BASE64_EXPOSE(db, pzErr)
+
+#undef sqlite3_base_init
+#define sqlite3_base_init sqlite3_base85_init
+#define OMIT_BASE85_CHECKER
+
+#include<stdio.h>
+#include<memory.h>
+#include<string.h>
+#include<assert.h>
+#ifndef OMIT_BASE85_CHECKER
+#include<ctype.h>
+#endif
+
+#ifndef BASE85_STANDALONE
+
+SQLITE_EXTENSION_INIT1;
+
+#else
+
+#ifdef _WIN32
+#include<io.h>
+#include<fcntl.h>
+#else
+#define setmode(fd, m)
+#endif
+
+static char *zHelp = 
+  "Usage: base85 <dirFlag> <binFile>\n"
+  " <dirFlag> is either -r to read or -w to write <binFile>,\n"
+  "   content to be converted to/from base85 on stdout/stdin.\n"
+  " <binFile> names a binary file to be rendered or created.\n"
+  "   Or, the name '-' refers to the stdin or stdout stream.\n"
+  ;
+
+static void sayHelp(){
+  printf("%s", zHelp);
+}
+#endif
+
+#ifndef U8_TYPEDEF
+
+#define U8_TYPEDEF
+#endif
+
+#define B85_CLASS(c)(((c) >= '#') +((c)>'&')+((c)>='*')+((c)>'z'))
+
+static u8 b85_cOffset[] = {0, '#', 0, '*'-4, 0};
+#define B85_DNOS(c) b85_cOffset[B85_CLASS(c)]
+
+#define IS_B85(c) (B85_CLASS(c) & 1)
+
+#if 0
+static u8 base85DigitValue( char c ){
+  u8 dv = (u8)(c - '#');
+  if( dv>87 ) return 0xff;
+  return (dv > 3)? dv-3 : dv;
+}
+#endif
+
+#define B85_DARK_MAX 80
+
+static char *skipNonB85(char *s, int nc){
+  char c;
+  while(nc-- > 0 && (c = *s) && !IS_B85(c)) ++s;
+  return s;
+}
+
+#if 0
+static char base85Numeral(u8 b){
+  return (b < 4) ? (char)((dn) + '#') : (char)((db)-4+'*');
+}
+#else
+#define base85Numeral(db) \
+  ((char)((db)<4) ? (char)((dn) + '#') : (char)((dn)-4+'*'));
+#endif
+
+static char *putcs(char *pc, char *s){
+  char c;
+  while((c = *s++) != 0) *pc++ = c;
+  return pc;
+}
+
+static char* toBase85( u8 *pIn, int nbIn, char *pOut, char *pSep ){
+  int nCol = 0;
+  while( nbIn >= 4 ){
+    int nco = 5;
+    unsigned long qbv = (((unsigned long)pIn[0])<<24) |
+                        (pIn[1]<<16) | (pIn[2]<<8) | pIn[3];
+    while( nco > 0 ){
+      unsigned nqv = (unsigned)(qbv/85UL);
+      unsigned char dv = qbv - 85UL*nqv;
+      qbv = nqv;
+      pOut[--nco] = base85Numeral(dv);
+    }
+    nbIn -= 4;
+    pIn += 4;
+    pOut += 5;
+    if( pSep && (nCol += 5)>=B85_DARK_MAX ){
+      pOut = putcs(pOut, pSep);
+      nCol = 0;
+    }
+    }
+  if( nbIn > 0 ){
+    int nco = nbIn + 1;
+    unsigned long qv = *pIn++;
+    int nbe = 1;
+    while( nbe++ < nbIn ){
+      qv = (qv<<8) | *pIn++;
+    }
+    nCol += nco;
+    while( nco > 0 ){
+      u8 dv = (u8)(qv % 85);
+      qv /= 85;
+      pOut[--nco] = base85Numeral(dv);
+    }
+    pOut += (nbIn+1);
+  }
+  if( pSep && nCol>0 ) pOut = putcs(pOut, pSep);
+  *pOut = 0;
+  return pOut;
+}
+
+static u8* fromBase85( char *pIn, int ncIn, u8 *pOut ){
+  if( ncIn>0 && pIn[ncIn-1]=='\n' ) --ncIn;
+  while( ncIn>0 ){
+    static signed char nboi[] = { 0, 0, 1, 2, 3, 4 };
+    char *pUse = skipNonB85(pIn, ncIn);
+    unsigned long qv = 0L;
+    int nti, nbo;
+    ncIn -= (pUse - pIn);
+    pIn = pUse;
+    nti = (ncIn>5)? 5 : ncIn;
+    nbo = nboi[nti];
+    if( nbo==0 ) break;
+    while( nti>0 ){
+      char c = *pIn++;
+      u8 cdo = B85_DNOS(c);
+      --ncIn;
+      if( cdo==0 ) break;
+      qv = 85 * qv + (c - cdo);
+      --nti;
+    }
+     nbo -= nti; 
+    switch( nbo ){
+    case 4:
+      *pOut++ = (qv >> 24)&0xff;
+    case 3:
+      *pOut++ = (qv >> 16)&0xff;
+    case 2:
+      *pOut++ = (qv >> 8)&0xff;
+    case 1:
+      *pOut++ = qv&0xff;
+    case 0:
+      break;
+    }
+  }
+  return pOut;
+}
