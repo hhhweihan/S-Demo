@@ -56,6 +56,39 @@ CPP-Learning-Plan/
 （代码单独建仓库或放 D:/CodeSpace/CPP-Practice/）
 ```
 
+## 每日打卡流程
+
+**第一步：找到今天的任务文件**
+
+```
+Month-XX-xxx/
+└── Week-YY-xxx/
+    └── Day-ZZ.md   ← 打开这个
+```
+
+**第二步：完成任务，勾选 checkbox**
+
+```markdown
+- [x] 实现 FixedAllocator 基础结构   ← 完成后改成 [x]
+- [ ] 写单元测试                      ← 未完成保持 [ ]
+```
+
+**第三步：git commit 打卡**
+
+```bash
+git add .
+git commit -m "W1D1: 建项目骨架，实现 FixedAllocator 接口"
+git push
+```
+
+commit 格式：`W{周数}D{天数}: 完成内容`，例如：
+- `W3D2: 手写 shared_ptr 控制块，引用计数测试通过`
+- `W7D5: 跳表 vs std::map 性能对比，跳表快 1.8x`
+
+**每周完成后：** 在 [Progress.md](./Progress.md) 对应行填入日期并打 `[x]`
+
+---
+
 ## 判断掌握标准
 
 > 不看任何资料，能从零把这个模块完整写出来 → 掌握了
