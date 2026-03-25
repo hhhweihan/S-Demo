@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(py --version)",
+      "Bash(py:*)",
+      "Bash(claude config:*)",
+      "Skill(update-config)",
+      "Bash(find . -maxdepth 2 -name \"Week-*.md\" ! -name \"README.md\" -delete)"
+    ]
+  }
+}
