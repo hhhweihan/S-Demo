@@ -1,0 +1,17 @@
+## Day 4（Thu）— 连接池压测
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 用 wrk 或 ab 工具对自己的 HTTP 服务器进行压测：
+  ```bash
+  wrk -t4 -c100 -d30s http://localhost:8080/echo
+  # 关注：QPS、延迟分布、错误率
+  ```
+- [ ] 对比单线程 Reactor vs 多线程 Reactor（one-loop-per-thread）的 QPS 差距
+- [ ] 记录性能数据
+
+**完成标志：** QPS 和延迟数据已记录
+
+---
+

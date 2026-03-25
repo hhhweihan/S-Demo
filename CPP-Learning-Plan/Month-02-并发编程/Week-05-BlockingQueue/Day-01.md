@@ -1,0 +1,25 @@
+## Day 1（Mon）— joining_thread（RAII 封装）
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 创建 `concurrent/joining_thread.h`
+- [ ] 实现 `JoiningThread`：
+  ```cpp
+  class JoiningThread {
+      std::thread t_;
+  public:
+      template<typename F, typename... Args>
+      explicit JoiningThread(F&& f, Args&&... args)
+          : t_(std::forward<F>(f), std::forward<Args>(args)...) {}
+      ~JoiningThread() { if (t_.joinable()) t_.join(); }  // 析构时自动 join
+      JoiningThread(JoiningThread&&) = default;
+      JoiningThread(const JoiningThread&) = delete;
+  };
+  ```
+- [ ] 测试：不调用 join()，离开作用域自动 join，主线程等子线程结束
+- [ ] 对比：直接用 `std::thread` 但忘记 join 会发生什么（`std::terminate`）
+
+**完成标志：** JoiningThread 析构时自动 join，不崩溃
+
+---

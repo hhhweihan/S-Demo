@@ -1,0 +1,25 @@
+## Day 3（Wed）— RPC 请求/响应消息
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 定义 RPC 元消息：
+  ```protobuf
+  message RpcRequest {
+      string service_name = 1;   // "EchoService"
+      string method_name  = 2;   // "Echo"
+      bytes  payload      = 3;   // 序列化的请求参数
+  }
+  message RpcResponse {
+      int32  code    = 1;  // 0=OK, 非0=错误
+      string errmsg  = 2;
+      bytes  payload = 3;  // 序列化的响应结果
+  }
+  ```
+- [ ] 实现服务端分发：根据 `service_name` + `method_name` 找到处理函数
+- [ ] 测试：服务端注册一个 EchoService，处理 Echo 请求
+
+**完成标志：** 服务端正确路由到 Echo 处理函数
+
+---
+

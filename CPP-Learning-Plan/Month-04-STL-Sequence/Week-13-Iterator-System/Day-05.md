@@ -1,0 +1,17 @@
+## Day 5（Fri）— 用 iterator_traits 优化 copy 算法
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 实现两版 `my_copy(first, last, dest)`：
+  ```cpp
+  // 版本1：通用，逐元素复制
+  // 版本2：当 iterator_category = random_access_iterator_tag 且
+  //         is_trivially_copyable<T> 时，用 memmove 批量复制
+  ```
+- [ ] 对 10 万个 int 的 copy：通用版 vs memmove 版，计时对比
+
+**完成标志：** memmove 版比通用版快 5x 以上
+
+---
+

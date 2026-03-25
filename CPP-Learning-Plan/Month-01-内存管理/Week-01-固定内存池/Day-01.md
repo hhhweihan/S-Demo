@@ -1,0 +1,29 @@
+## Day 1（Mon）— 建骨架，写接口
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 在代码目录（如 `CPP-Practice/memory_pool/`）创建 `fixed_allocator.h`
+- [ ] 声明 4 个公开接口（先只写头文件，不写实现）：
+  ```cpp
+  class FixedAllocator {
+  public:
+      // block_size: 每块字节数，block_count: 初始块数
+      void init(size_t block_size, size_t block_count);
+      void* allocate();
+      void  deallocate(void* ptr);
+      struct Stats { size_t total, used, chunks; };
+      Stats stats() const;
+  };
+  ```
+- [ ] 在注释里画出内存布局草图：
+  ```
+  chunk: [block0][block1][block2]...[blockN]
+  free_list: block0 -> block2 -> block5 -> nullptr
+  每个空闲 block 的前 8 字节存下一个空闲块的指针
+  ```
+- [ ] 创建 `main.cpp`，写 `#include "fixed_allocator.h"` 能编译通过
+
+**完成标志：** 头文件接口清晰，注释有内存布局图，编译无报错
+
+---

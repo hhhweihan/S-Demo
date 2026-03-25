@@ -1,0 +1,15 @@
+## Day 6（Sat）— 读 libc++ map 源码
+
+**预计时间：2 小时**
+
+**任务：**
+- [ ] 阅读 libc++ `include/map`（重点：`__map_iterator`、`operator[]`、`insert`）
+- [ ] 回答：
+  1. 为什么 `map::iterator` 的 `value_type` 是 `pair<const Key, Value>` 而不是 `pair<Key, Value>`？
+  2. `operator[]` 为什么会使 `map` 不能是 const 的？
+  3. libc++ 如何实现 `hint` 插入（`insert(hint, value)`）来达到均摊 O(1)？
+
+**完成标志：** 3 个问题有答案
+
+---
+

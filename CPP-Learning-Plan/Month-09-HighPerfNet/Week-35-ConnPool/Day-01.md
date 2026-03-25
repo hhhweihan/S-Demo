@@ -1,0 +1,29 @@
+## Day 1（Mon）— 连接池基础设计
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 设计连接池接口：
+  ```cpp
+  class TcpConnPool {
+  public:
+      TcpConnPool(const string& host, int port,
+                  int min_size = 4, int max_size = 32);
+      // 获取连接（没有空闲则新建，超过 max 则阻塞等待）
+      shared_ptr<TcpConn> acquire(int timeout_ms = 1000);
+      // 归还连接（正常归还 or 连接异常时销毁）
+      void release(shared_ptr<TcpConn> conn, bool healthy = true);
+  private:
+      deque<shared_ptr<TcpConn>> idle_;
+      mutex mu_;
+      condition_variable cv_;
+      int active_count_ = 0;
+  };
+  ```
+- [ ] 实现 `acquire` 和 `release` 基础版（单后端）
+- [ ] 测试：4 个工作线程共享连接池，并发请求不报错
+
+**完成标志：** 连接池基本复用功能正常
+
+---
+

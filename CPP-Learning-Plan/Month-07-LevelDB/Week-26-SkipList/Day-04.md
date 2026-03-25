@@ -1,0 +1,14 @@
+## Day 4（Thu）— 对比差异 + 无锁升级
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 把你的有锁版本和 LevelDB 的无锁版本对比，找出 3 处主要差异
+- [ ] 尝试把你的版本改为无锁（参考 LevelDB 的 atomic + memory_order 用法）
+  - 写者：在链入新节点前用 `release` store（保证其他线程看到完整的 Node）
+  - 读者：用 `acquire` load（配对 release，建立 happens-before 关系）
+- [ ] 用 TSan 验证无锁版本无数据竞争
+
+**完成标志：** TSan 无报错
+
+---

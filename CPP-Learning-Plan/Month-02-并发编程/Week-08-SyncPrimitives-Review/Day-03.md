@@ -1,0 +1,18 @@
+## Day 3（Wed）— 整合到线程池
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 用 `CountDownLatch` 实现线程池的 `await_termination()`：
+  ```cpp
+  // 提交任务时：latch_.count_up()（注意：需要把 CountDownLatch 改成支持递增）
+  // 任务完成时：latch_.count_down()
+  // await_termination()：latch_.wait()
+  ```
+  或者用 `std::atomic<int> pending_tasks_` + condition_variable 实现
+- [ ] 给线程池加 `pause()` / `resume()`（暂停/恢复接受新任务）
+- [ ] 测试：提交 100 个慢任务，pause，再提交 100 个任务（应该阻塞），resume 后继续
+
+**完成标志：** pause/resume 逻辑正确，await_termination 等待所有任务完成
+
+---

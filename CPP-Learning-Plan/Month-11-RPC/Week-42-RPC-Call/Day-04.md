@@ -1,0 +1,23 @@
+## Day 4（Thu）— 重试机制
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 实现自动重试（幂等接口）：
+  ```cpp
+  // 重试策略：最多 3 次，指数退避（1s, 2s, 4s）
+  class RetryPolicy {
+      int max_retries_ = 3;
+      int base_ms_ = 100;
+  public:
+      bool should_retry(int attempt, const RpcStatus& status);
+      int  backoff_ms(int attempt);  // 100ms * 2^attempt
+  };
+  ```
+- [ ] 只重试幂等错误（网络超时、连接断开），不重试逻辑错误
+- [ ] 测试：服务端随机拒绝 30% 的请求，重试后成功率 > 99%
+
+**完成标志：** 重试机制工作，日志记录重试次数
+
+---
+

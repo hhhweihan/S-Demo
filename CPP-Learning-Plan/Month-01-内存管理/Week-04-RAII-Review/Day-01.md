@@ -1,0 +1,31 @@
+## Day 1（Mon）— scope_guard 实现
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 创建 `raii/scope_guard.h`
+- [ ] 实现 `ScopeGuard`：
+  ```cpp
+  template<typename F>
+  class ScopeGuard {
+      F func_;
+      bool dismissed_ = false;
+  public:
+      explicit ScopeGuard(F f) : func_(std::move(f)) {}
+      ~ScopeGuard() { if (!dismissed_) func_(); }
+      void dismiss() { dismissed_ = true; }      // 取消执行
+      ScopeGuard(const ScopeGuard&) = delete;
+      ScopeGuard& operator=(const ScopeGuard&) = delete;
+  };
+
+  template<typename F>
+  auto make_scope_guard(F&& f) { return ScopeGuard<F>(std::forward<F>(f)); }
+  ```
+- [ ] 测试：
+  - 正常路径：guard 析构时打印 "cleanup"
+  - dismiss 路径：dismiss() 后不打印
+  - 异常路径：函数抛异常，guard 仍执行清理
+
+**完成标志：** 三种路径都正确，异常时不泄漏
+
+---

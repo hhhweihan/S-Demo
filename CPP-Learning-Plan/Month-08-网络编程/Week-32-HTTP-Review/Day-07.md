@@ -1,0 +1,16 @@
+## Day 7（Sun）— 复盘 + 规划 Month 9
+
+**预计时间：1 小时**
+
+- [ ] 整理 Reactor 模式的完整设计图（EventLoop/Channel/Poller/TcpConnection）
+- [ ] `git commit`，推送
+
+---
+
+## 本周结果（完成后填写）
+
+**HTTP Server 压测：**
+| 模式 | QPS | P99 延迟 | 错误率 |
+|------|-----|---------|--------|
+| 单线程 Reactor | — | — | — |
+| 4线程 Reactor | — | — | — |

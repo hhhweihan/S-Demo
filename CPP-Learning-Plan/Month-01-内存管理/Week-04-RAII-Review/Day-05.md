@@ -1,0 +1,17 @@
+## Day 5（Fri）— 整月综合 Benchmark
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 写 `month1_benchmark.cpp`，测试所有产出：
+  ```
+  [内存池] FixedAllocator vs new/delete（32 字节，100 万次）
+  [内存池] PoolAllocator（混合大小，100 万次）
+  [智能指针] SharedPtr 构造/析构 vs new/delete（100 万次）
+  [智能指针] UniquePtr 构造/析构 vs new/delete（100 万次）
+  ```
+- [ ] 把数据填到「本周结果」的 benchmark 表格
+
+**完成标志：** 4 项 benchmark 都有数据
+
+---

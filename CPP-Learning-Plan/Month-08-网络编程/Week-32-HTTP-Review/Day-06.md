@@ -1,0 +1,15 @@
+## Day 6（Sat）— 阅读 muduo 网络库源码
+
+**预计时间：2 小时**
+
+**任务：**
+- [ ] 阅读 muduo `net/TcpServer.cc` / `net/TcpConnection.cc`
+- [ ] 回答：
+  1. muduo 为什么用 `weak_ptr<TcpConnection>` 而不是 `shared_ptr` 在 Channel 回调中？
+  2. muduo 的 `runInLoop` + `queueInLoop` 如何保证跨线程调用的安全？
+  3. muduo 如何实现优雅关闭（halfClose）？
+
+**完成标志：** 3 个问题有答案
+
+---
+

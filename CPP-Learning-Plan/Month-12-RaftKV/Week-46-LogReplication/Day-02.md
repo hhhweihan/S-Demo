@@ -1,0 +1,22 @@
+## Day 2（Tue）— Leader 发 AppendEntries
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] Leader 维护每个 Follower 的进度：
+  ```cpp
+  // next_index_[peer]：下一条要发给 peer 的日志 index（初始为 last_log_index+1）
+  // match_index_[peer]：已确认复制到 peer 的最高日志 index（初始为 0）
+  ```
+- [ ] `replicate_log(peer)`：
+  ```cpp
+  int64_t prev_index = next_index_[peer] - 1;
+  int64_t prev_term  = log_.get(prev_index).term;
+  auto entries = log_.get_from(next_index_[peer]);  // 要发的条目
+  peer.send_append_entries(current_term, node_id, prev_index, prev_term,
+                            entries, commit_index_);
+  ```
+
+**完成标志：** Leader 能向 Follower 发送日志条目
+
+---

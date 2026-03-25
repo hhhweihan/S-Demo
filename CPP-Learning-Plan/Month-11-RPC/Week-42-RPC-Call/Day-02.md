@@ -1,0 +1,24 @@
+## Day 2（Tue）— 实现 Promise/Future
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 实现简单的 Future/Promise（如果还没有）：
+  ```cpp
+  template<typename T>
+  class Future {
+  public:
+      T get();                     // 阻塞等待（同步使用）
+      void then(function<void(T)> cb);  // 注册回调（异步使用）
+      bool ready() const;
+  };
+  ```
+- [ ] 支持两种使用方式：
+  - `.get()` → 阻步等待（同步客户端）
+  - `.then(cb)` → 回调（异步客户端）
+- [ ] 测试：与协程结合（Month 10 的 `co_await future`）
+
+**完成标志：** Future.get() 和 Future.then() 均正常工作
+
+---
+

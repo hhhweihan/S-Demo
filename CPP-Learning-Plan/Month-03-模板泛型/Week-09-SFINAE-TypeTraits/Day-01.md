@@ -1,0 +1,21 @@
+## Day 1（Mon）— 函数模板特化与重载
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 复习：函数模板 vs 函数重载的优先级规则
+- [ ] 写 3 个例子，区分「模板特化」和「函数重载」的行为差异
+- [ ] 理解 ADL（Argument-Dependent Lookup）：
+  ```cpp
+  namespace ns { struct Foo {}; void swap(Foo&, Foo&); }
+  // 为什么 std::swap 会调用 ns::swap？
+  ```
+- [ ] 实现 `is_same<T, U>`（最简版）：
+  ```cpp
+  template<typename T, typename U> struct is_same : std::false_type {};
+  template<typename T>             struct is_same<T, T> : std::true_type {};
+  ```
+
+**完成标志：** `is_same<int, int>::value == true`，`is_same<int, double>::value == false`
+
+---

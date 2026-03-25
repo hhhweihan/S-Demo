@@ -1,0 +1,19 @@
+## Day 4（Thu）— SQPOLL 内核轮询模式
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 了解 `IORING_SETUP_SQPOLL`：内核线程轮询 SQ，提交 IO 无需系统调用：
+  ```cpp
+  struct io_uring_params params = {};
+  params.flags |= IORING_SETUP_SQPOLL;
+  params.sq_thread_idle = 2000;  // 空闲 2 秒后睡眠
+  io_uring_queue_init_params(256, &ring, &params);
+  ```
+- [ ] 分析适用场景：高 IOPS 场景下系统调用开销 vs SQPOLL CPU 消耗
+- [ ] 测试：SQPOLL 模式下的文件读写吞吐量
+
+**完成标志：** 理解 SQPOLL 的 trade-off，数据已记录
+
+---
+

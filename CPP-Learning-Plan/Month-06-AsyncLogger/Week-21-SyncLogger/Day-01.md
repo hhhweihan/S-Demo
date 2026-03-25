@@ -1,0 +1,27 @@
+## Day 1（Mon）— 日志级别 + 基础结构
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 定义日志级别和全局 Logger：
+  ```cpp
+  enum class LogLevel { DEBUG, INFO, WARN, ERROR, FATAL };
+
+  class Logger {
+  public:
+      static Logger& instance();
+      void set_level(LogLevel lv) { level_ = lv; }
+      void log(LogLevel lv, const char* file, int line,
+               const std::string& msg);
+  private:
+      LogLevel level_ = LogLevel::INFO;
+      std::mutex mu_;
+  };
+  ```
+- [ ] 实现 `log()` 直接 fprintf 到 stderr（先不做文件输出）
+- [ ] 测试：手动调用 `Logger::instance().log(INFO, __FILE__, __LINE__, "hello")`
+
+**完成标志：** 能看到带时间戳和文件位置的日志输出
+
+---
+

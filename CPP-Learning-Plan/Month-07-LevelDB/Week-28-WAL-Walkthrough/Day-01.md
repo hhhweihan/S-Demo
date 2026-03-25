@@ -1,0 +1,19 @@
+## Day 1（Mon）— 读 WAL 格式
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 读 `db/log_format.h` + `db/log_writer.h/cc`（约 120 行）
+- [ ] 理解 WAL record 格式：
+  ```
+  checksum (4 bytes) | length (2 bytes) | type (1 byte) | data
+  type: kFullType / kFirstType / kMiddleType / kLastType（一条 record 可能跨多个 32KB block）
+  ```
+- [ ] 回答：
+  1. 为什么 WAL record 要有 checksum？（检测磁盘损坏/写入不完整）
+  2. 崩溃恢复时，如何用 WAL 重建 MemTable？（读 `db/db_impl.cc` 的 `RecoverLogFile`）
+  3. WAL 和你的 Raft 笔记里的日志有什么相同和不同的设计目标？
+
+**完成标志：** 3 个问题有答案
+
+---
