@@ -1,0 +1,17 @@
+## Day 4（Thu）— 扇入 + 扇出模式
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 实现 `merge(channels...)` → 扇入（将多个 Channel 合并为一个）：
+  ```cpp
+  Channel<T> merged = merge(ch1, ch2, ch3);
+  // 任意源 Channel 有数据时转发到 merged
+  ```
+- [ ] 实现 `broadcast(ch, n)` → 扇出（将一个 Channel 分发给 n 个消费者）
+- [ ] 测试：pipeline 模式（生产 → 过滤 → 转换 → 消费，各阶段用 Channel 连接）
+
+**完成标志：** pipeline 模式端到端数据流正确
+
+---
+

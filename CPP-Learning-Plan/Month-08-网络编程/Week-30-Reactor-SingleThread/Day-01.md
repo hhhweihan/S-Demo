@@ -1,0 +1,23 @@
+## Day 1（Mon）— Reactor 模式设计
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 理解 Reactor 三个核心角色：
+  ```
+  EventLoop：事件循环，不断 epoll_wait，分发事件
+  Channel：fd 的封装，持有 read/write/close 回调
+  Poller：epoll 的封装，负责注册/取消/等待事件
+  ```
+- [ ] 画出组件关系图：
+  ```
+  EventLoop ─── Poller（持有 epoll fd）
+     │
+  Channel（listen fd）── Acceptor
+  Channel（conn fd）─── TcpConnection
+  ```
+- [ ] 定义好三个类的头文件接口（先不实现，只写 .h）
+
+**完成标志：** 三个头文件接口设计合理，无循环依赖
+
+---

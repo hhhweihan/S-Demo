@@ -1,0 +1,23 @@
+## Day 1（Mon）— MyList 节点设计
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 定义节点结构（带哨兵节点，避免边界处理）：
+  ```cpp
+  struct ListNode {
+      ListNode* prev;
+      ListNode* next;
+  };
+  template<typename T>
+  struct ListNodeData : ListNode {
+      T data;
+  };
+  ```
+- [ ] 哨兵节点（dummy head）：`head_.next = &head_; head_.prev = &head_;`
+- [ ] 实现 `insert_before(node, val)` 私有方法
+
+**完成标志：** 能手动插入 3 个节点并用 while 遍历
+
+---
+

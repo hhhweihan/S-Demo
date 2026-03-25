@@ -1,0 +1,20 @@
+## Day 2（Tue）— 协程间通信（回调 + 唤醒）
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 实现协程的等待/唤醒机制：
+  ```cpp
+  // Fiber 等待某个条件：
+  scheduler.suspend_current([&](Fiber* f) {
+      // 条件满足时调用 f->resume() 唤醒
+      register_callback([f]{ scheduler.resume(f); });
+  });
+  ```
+- [ ] 实现 `Fiber::await(future)`：等待一个 future 完成（避免阻塞线程）
+- [ ] 测试：协程 A 等待协程 B 完成，B 完成后通知 A
+
+**完成标志：** 协程间同步通知正确
+
+---
+

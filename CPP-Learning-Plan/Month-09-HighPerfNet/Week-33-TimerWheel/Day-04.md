@@ -1,0 +1,22 @@
+## Day 4（Thu）— 心跳检测集成
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 给每个 TCP 连接添加活跃时间戳，接收到数据时更新
+- [ ] 用时间轮实现空闲连接检测（60 秒无数据则关闭）：
+  ```cpp
+  // 连接建立时：
+  timer_id_ = timer_wheel_.add(60000, [conn_wp = weak_ptr(conn)](){
+      if (auto conn = conn_wp.lock()) conn->close();
+  });
+  // 收到数据时：
+  timer_wheel_.cancel(timer_id_);
+  timer_id_ = timer_wheel_.add(60000, ...);  // 重置
+  ```
+- [ ] 测试：建立 1000 个连接，60 秒不发数据后全部被清理
+
+**完成标志：** 空闲连接在 60 秒内被清理，活跃连接不被清理
+
+---
+

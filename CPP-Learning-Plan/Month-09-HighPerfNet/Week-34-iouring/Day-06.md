@@ -1,0 +1,15 @@
+## Day 6（Sat）— 阅读 liburing 源码
+
+**预计时间：2 小时**
+
+**任务：**
+- [ ] 阅读 liburing `src/lib.c` 和内核 `io_uring/io_uring.c` 关键路径
+- [ ] 回答：
+  1. io_uring 为什么比 epoll + read/write 少一次系统调用？（共享内存环）
+  2. `io_uring_peek_cqe` 和 `io_uring_wait_cqe` 的区别（轮询 vs 阻塞）？
+  3. io_uring 的 `multishot accept` 如何减少 accept 系统调用次数？
+
+**完成标志：** 3 个问题有答案
+
+---
+

@@ -1,0 +1,19 @@
+## Day 3（Wed）— binary_search 算法族
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 实现以下算法（均基于 lower_bound）：
+  ```cpp
+  lower_bound(first, last, val)   // 第一个 >= val 的位置
+  upper_bound(first, last, val)   // 第一个 > val 的位置
+  binary_search(first, last, val) // 是否存在
+  equal_range(first, last, val)   // {lower_bound, upper_bound}
+  ```
+- [ ] 这些算法要求随机访问迭代器，验证在 MyVector 上工作
+- [ ] 对比：在 10 万有序数组上各查找 1 万次，与 std 版本性能相同
+
+**完成标志：** 结果与 std 算法一致
+
+---
+

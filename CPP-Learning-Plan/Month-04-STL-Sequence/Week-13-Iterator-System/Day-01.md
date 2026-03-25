@@ -1,0 +1,39 @@
+## Day 1（Mon）— 迭代器类别标签
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 创建 `mystl/iterator.h`，定义 5 种迭代器类别标签（空结构体）：
+  ```cpp
+  struct input_iterator_tag {};
+  struct output_iterator_tag {};
+  struct forward_iterator_tag       : input_iterator_tag {};
+  struct bidirectional_iterator_tag : forward_iterator_tag {};
+  struct random_access_iterator_tag : bidirectional_iterator_tag {};
+  ```
+- [ ] 定义 `iterator_traits<Iterator>` 主模板和针对裸指针的偏特化：
+  ```cpp
+  template<typename Iter>
+  struct iterator_traits {
+      using iterator_category = typename Iter::iterator_category;
+      using value_type        = typename Iter::value_type;
+      using difference_type   = typename Iter::difference_type;
+      using pointer           = typename Iter::pointer;
+      using reference         = typename Iter::reference;
+  };
+  // 裸指针特化
+  template<typename T>
+  struct iterator_traits<T*> {
+      using iterator_category = random_access_iterator_tag;
+      using value_type        = T;
+      using difference_type   = ptrdiff_t;
+      using pointer           = T*;
+      using reference         = T&;
+  };
+  ```
+- [ ] 测试：`iterator_traits<int*>::iterator_category` 是 `random_access_iterator_tag`
+
+**完成标志：** iterator_traits 针对裸指针和自定义迭代器都能正确推导
+
+---
+

@@ -1,0 +1,24 @@
+## Day 4（Thu）— allocator_traits 完整接入
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 将 Month 4-5 所有容器改为通过 `allocator_traits` 调用分配器：
+  ```cpp
+  // Before（直接调用 allocator）：
+  alloc_.construct(ptr, args...);
+  // After（通过 allocator_traits）：
+  allocator_traits<Alloc>::construct(alloc_, ptr, args...);
+  ```
+- [ ] 接入 Month 1 的 PoolAllocator：
+  ```cpp
+  MyVector<int, PoolAllocator<int>> pv;
+  MyList<int, PoolAllocator<int>>   pl;
+  MyMap<int, int, std::less<int>, PoolAllocator<pair<const int,int>>> pm;
+  ```
+- [ ] 验证：所有容器用 PoolAllocator 能正常工作（ASan 无报错）
+
+**完成标志：** PoolAllocator 在 MyVector/MyList/MyMap 上均正常
+
+---
+

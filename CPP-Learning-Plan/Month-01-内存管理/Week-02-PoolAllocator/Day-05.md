@@ -1,0 +1,18 @@
+## Day 5（Fri）— 线程安全 + 性能测试
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 给每个 FixedAllocator 加 `std::mutex`，`allocate/deallocate` 加锁
+- [ ] 测试多线程安全：4 个线程各分配/释放 10 万次，验证无崩溃
+- [ ] Benchmark 对比（分配/释放 100 万次，32 字节对象）：
+  ```
+  new/delete
+  PoolAllocator（单线程）
+  PoolAllocator（加锁，4 线程竞争）
+  ```
+- [ ] 把结果写到「本周结果」
+
+**完成标志：** 多线程无崩溃，单线程 PoolAllocator 比 new 快 2x+
+
+---

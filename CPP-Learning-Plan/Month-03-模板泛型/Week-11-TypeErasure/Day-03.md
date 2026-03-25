@@ -1,0 +1,30 @@
+## Day 3（Wed）— 手写 variant（visit）
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 实现 `visit(visitor, variant)`：
+  ```cpp
+  template<typename Visitor, typename... Ts>
+  auto visit(Visitor&& vis, Variant<Ts...>& var) {
+      // 用 index_ 做运行时分发
+      // 技巧：构造一个函数指针表（jump table）
+      using RetType = std::invoke_result_t<Visitor, std::tuple_element_t<0, std::tuple<Ts...>>>;
+      using FuncPtr = RetType(*)(Visitor&&, void*);
+      static FuncPtr table[] = {
+          [](Visitor&& v, void* p) { return v(*reinterpret_cast<Ts*>(p)); }...
+      };
+      return table[var.index()](std::forward<Visitor>(vis), var.storage_);
+  }
+  ```
+- [ ] 测试：
+  ```cpp
+  Variant<int, std::string> v(42);
+  visit([](auto x){ std::cout << x; }, v);  // 打印 42
+  v = std::string("hello");
+  visit([](auto x){ std::cout << x; }, v);  // 打印 hello
+  ```
+
+**完成标志：** visit 对两种类型都能正确调用
+
+---

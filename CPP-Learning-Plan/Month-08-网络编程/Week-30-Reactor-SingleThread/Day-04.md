@@ -1,0 +1,22 @@
+## Day 4（Thu）— 实现 Acceptor
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] `Acceptor`：封装 listen socket，接受新连接
+  ```cpp
+  class Acceptor {
+      Channel listen_channel_;
+      std::function<void(int fd)> new_conn_cb_;  // 新连接回调
+  public:
+      Acceptor(EventLoop* loop, int port);
+      void set_new_connection_callback(std::function<void(int)> cb);
+  private:
+      void handle_read();  // 调用 accept()，触发 new_conn_cb_
+  };
+  ```
+- [ ] 测试：EventLoop + Acceptor 能接受新连接（打印 "new connection from port xxx"）
+
+**完成标志：** 能接受新连接，打印连接信息
+
+---

@@ -1,0 +1,27 @@
+## Day 1（Mon）— RPC 连接池集成
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 将 Month 9 的 `TcpConnPool` 接入 `AsyncRpcClient`：
+  ```cpp
+  class PooledRpcClient {
+      LoadBalancer balancer_;  // 持有多后端连接池
+  public:
+      Future<RpcResponse> call(const string& svc, const string& method,
+                                const Message& req) {
+          auto conn = balancer_.acquire();        // 从池中取连接
+          return async_call(conn, svc, method, req)
+              .then([conn, &balancer_](auto resp){
+                  balancer_.release(conn);        // 用完归还
+                  return resp;
+              });
+      }
+  };
+  ```
+- [ ] 测试：8 线程并发 RPC，连接池大小 16，验证连接复用
+
+**完成标志：** 连接池与 RPC 框架集成，并发调用无报错
+
+---
+

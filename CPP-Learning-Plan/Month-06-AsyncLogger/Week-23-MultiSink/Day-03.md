@@ -1,0 +1,24 @@
+## Day 3（Wed）— ConsoleSink（彩色终端）
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 实现 `ConsoleSink`：不同级别用 ANSI 颜色区分：
+  ```cpp
+  // DEBUG: 灰色  INFO: 绿色  WARN: 黄色  ERROR: 红色  FATAL: 红底白字
+  static const char* level_colors[] = {
+      "\033[90m", "\033[32m", "\033[33m", "\033[31m", "\033[41;37m"
+  };
+  void write(LogLevel lv, const char* data, size_t len) override {
+      fputs(level_colors[int(lv)], stderr);
+      fwrite(data, 1, len, stderr);
+      fputs("\033[0m\n", stderr);
+  }
+  ```
+- [ ] 检测是否为 TTY（`isatty(fileno(stderr))`），非 TTY 不输出颜色
+- [ ] 测试：不同级别日志输出不同颜色
+
+**完成标志：** 终端彩色输出正确，重定向时无乱码
+
+---
+

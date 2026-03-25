@@ -1,0 +1,15 @@
+## Day 6（Sat）— 读 libc++ vector 源码
+
+**预计时间：2 小时**
+
+**任务：**
+- [ ] 阅读 libc++ `include/vector`（重点：`__vector_base`、`push_back`、`_M_reallocate`）
+- [ ] 回答：
+  1. libc++ 的 `push_back` 为什么分 `push_back(const T&)` 和 `push_back(T&&)` 两个重载？
+  2. `emplace_back` 如何用 placement new 原地构造，避免额外拷贝？
+  3. `insert` 为什么要先处理「目标位置在已有元素中间」和「目标位置在末尾」两种情况？
+
+**完成标志：** 3 个问题有答案
+
+---
+

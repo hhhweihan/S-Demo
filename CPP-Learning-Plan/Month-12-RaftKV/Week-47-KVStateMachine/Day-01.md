@@ -1,0 +1,24 @@
+## Day 1（Mon）— KV 状态机接口
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 定义 `StateMachine` 接口：
+  ```cpp
+  class StateMachine {
+  public:
+      virtual void apply(const std::string& command) = 0;  // 应用一条日志
+      virtual std::string get(const std::string& key) = 0;
+      virtual ~StateMachine() = default;
+  };
+  ```
+- [ ] 定义命令格式（序列化为 log entry 的 data）：
+  ```
+  PUT key value    → "PUT\0key\0value"（或用 protobuf）
+  DELETE key       → "DEL\0key"
+  ```
+- [ ] RaftNode 在 commit 后调用 `state_machine->apply(log_entry.data)`
+
+**完成标志：** 接口清晰，apply 被正确调用
+
+---

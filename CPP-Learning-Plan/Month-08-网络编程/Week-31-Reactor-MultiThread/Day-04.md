@@ -1,0 +1,23 @@
+## Day 4（Thu）— HTTP 协议解析
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 实现简单的 HTTP/1.1 请求解析：
+  ```
+  GET /path HTTP/1.1\r\n
+  Host: ...\r\n
+  \r\n
+  ```
+- [ ] 只解析 GET 请求的 method + path + headers
+- [ ] 生成 HTTP 响应：
+  ```
+  HTTP/1.1 200 OK\r\n
+  Content-Length: N\r\n
+  \r\n
+  <body>
+  ```
+
+**完成标志：** 能用浏览器访问并得到正确响应
+
+---

@@ -1,0 +1,24 @@
+## Day 2（Tue）— io_uring 网络 IO
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 用 io_uring 实现 TCP Echo Server：
+  - `io_uring_prep_accept`：等待新连接
+  - `io_uring_prep_recv`：接收数据
+  - `io_uring_prep_send`：发送数据
+  - 每个操作完成后提交下一个操作（链式提交）
+- [ ] 实现事件循环：
+  ```cpp
+  while (true) {
+      io_uring_wait_cqe(&ring, &cqe);
+      // 根据 cqe->user_data 判断操作类型，处理完成事件
+      io_uring_cqe_seen(&ring, cqe);
+  }
+  ```
+- [ ] 测试：与 epoll Echo Server 在功能上等价
+
+**完成标志：** io_uring Echo Server 能正确处理并发连接
+
+---
+

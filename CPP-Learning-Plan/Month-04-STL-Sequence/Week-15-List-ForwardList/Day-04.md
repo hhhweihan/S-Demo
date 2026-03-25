@@ -1,0 +1,15 @@
+## Day 4（Thu）— MyForwardList
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 实现单向链表 `forward_list<T>`（只有 next 指针）：
+  - 迭代器类别：`forward_iterator_tag`
+  - 不支持 `push_back`（只有 `push_front` 是 O(1)，push_back 是 O(n)）
+  - 实现 `insert_after(pos, val)` / `erase_after(pos)` / `before_begin()`
+- [ ] 验证：forward_list 的 iterator 不能用 `--`（编译报错）
+
+**完成标志：** forward_list 基本操作正确，`--` 编译报错
+
+---
+

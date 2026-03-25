@@ -1,0 +1,36 @@
+## Day 3（Wed）— SPSC 无锁队列
+
+**预计时间：1 小时**
+
+**任务：**
+- [ ] 创建 `lockfree/spsc_queue.h`，实现 SPSC 环形缓冲队列：
+  ```cpp
+  template<typename T, size_t N>
+  class SPSCQueue {
+      T buffer_[N];
+      std::atomic<size_t> head_{0};  // 只有消费者写
+      std::atomic<size_t> tail_{0};  // 只有生产者写
+  public:
+      bool push(const T& val) {
+          size_t t = tail_.load(std::memory_order_relaxed);
+          size_t next = (t + 1) % N;
+          if (next == head_.load(std::memory_order_acquire)) return false; // 满
+          buffer_[t] = val;
+          tail_.store(next, std::memory_order_release);
+          return true;
+      }
+      bool pop(T& out) {
+          size_t h = head_.load(std::memory_order_relaxed);
+          if (h == tail_.load(std::memory_order_acquire)) return false; // 空
+          out = buffer_[h];
+          head_.store((h + 1) % N, std::memory_order_release);
+          return true;
+      }
+  };
+  ```
+- [ ] 测试：1 个生产者线程 push 100 万个数，1 个消费者 pop，验证无丢失
+- [ ] 用 TSan 运行，确认无数据竞争
+
+**完成标志：** TSan 无报错，100 万次无丢失
+
+---

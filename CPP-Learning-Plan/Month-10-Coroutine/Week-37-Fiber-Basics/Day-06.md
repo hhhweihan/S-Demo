@@ -1,0 +1,15 @@
+## Day 6（Sat）— 阅读 libco 源码（腾讯 C++ 协程库）
+
+**预计时间：2 小时**
+
+**任务：**
+- [ ] 阅读 libco `co_routine.cpp`（重点：协程切换的汇编实现）
+- [ ] 回答：
+  1. libco 为什么用汇编实现 `co_swap` 而不用 `swapcontext`（性能：汇编 ~5ns vs ucontext ~50ns）？
+  2. libco 如何用 TLS（线程局部存储）管理每个线程的当前协程？
+  3. libco 的 hook 机制（hook read/write 等系统调用）是如何实现的？
+
+**完成标志：** 3 个问题有答案
+
+---
+

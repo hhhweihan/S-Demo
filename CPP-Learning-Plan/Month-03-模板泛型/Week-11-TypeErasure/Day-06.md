@@ -1,0 +1,16 @@
+## Day 6（Sat）— 整合实验
+
+**预计时间：2 小时**
+
+**任务：**
+- [ ] 写一个「命令解析器」把本月产出全用上：
+  ```cpp
+  // 用 Variant<int, double, std::string> 表示命令参数值
+  // 用 Function<void(std::string, Variant<...>)> 表示命令处理器
+  // 用 Tuple<...> 存储命令参数列表
+  // 解析命令行参数，dispatch 到对应的 Function
+  ```
+
+**完成标志：** 至少支持 2 种参数类型的命令解析
+
+---
