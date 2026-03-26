@@ -1,6 +1,0 @@
-## Day 7（Sun）— 复盘整理
-
-**预计时间：1 小时**
-
-- [ ] 整理红黑树 insert/delete fixup 的思路，用自己的语言重新描述一遍
-- [ ] `git commit`，推送
