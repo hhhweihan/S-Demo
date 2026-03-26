@@ -46,8 +46,8 @@ CPP-Learning-Plan/
 │   ├── README.md
 │   ├── Week-01-固定内存池/
 │   │   ├── README.md
-│   │   ├── Day-01.md  ← 每日任务说明
-│   │   └── Day-07.md
+│   │   ├── Day-001.md  ← 每日任务说明（全局编号）
+│   │   └── Day-007.md
 │   └── Week-02 ... Week-04/
 ├── Month-02-并发编程/ ...
 ├── ...
@@ -63,7 +63,7 @@ CPP-Learning-Plan/
 ```
 Month-XX-xxx/
 └── Week-YY-xxx/
-    └── Day-ZZ.md   ← 打开这个
+    └── Day-NNN.md   ← 打开这个（NNN 为全局天数编号）
 ```
 
 **第二步：完成任务，勾选 checkbox**
