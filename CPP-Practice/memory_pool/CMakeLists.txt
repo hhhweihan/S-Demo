@@ -4,6 +4,7 @@ project(memory_pool_demo LANGUAGES CXX)
 
 add_executable(memory_pool_demo
     main.cpp
+    fixed_allocator.cpp
     fixed_allocator.h
 )
 
