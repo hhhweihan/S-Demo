@@ -38,6 +38,7 @@ BenchmarkResult run_benchmark(const std::string& name, Fn&& fn) {
 }
 
 void run_day05_benchmark() {
+    // 累加写入结果，避免编译器把整个循环优化掉。
     volatile int sink = 0;
 
     const BenchmarkResult new_delete = run_benchmark("new/delete", [&sink]() {
@@ -50,6 +51,7 @@ void run_day05_benchmark() {
     });
 
     FixedAllocator allocator;
+    // 预留足够大的初始容量，避免 benchmark 测到扩容成本。
     allocator.init(sizeof(int), static_cast<std::size_t>(kBenchmarkIterations));
 
     const BenchmarkResult fixed_allocator = run_benchmark("FixedAllocator", [&allocator, &sink]() {
@@ -156,6 +158,7 @@ void test_mixed_random_allocate_deallocate() {
     std::unordered_set<void*> allocated_set;
 
     for (int i = 0; i < 10000; ++i) {
+        // 空集合时必须分配；否则按 60% 概率继续分配。
         bool do_allocate = active.empty() || op_dist(rng) < 60;
 
         if (do_allocate) {
@@ -165,6 +168,7 @@ void test_mixed_random_allocate_deallocate() {
             allocated_set.insert(p);
             active.push_back(p);
         } else {
+            // 用 swap-pop 从活动集合中 O(1) 删除一个随机元素。
             std::uniform_int_distribution<std::size_t> idx_dist(0, active.size() - 1);
             std::size_t idx = idx_dist(rng);
             void* p = active[idx];
@@ -186,6 +190,7 @@ void test_mixed_random_allocate_deallocate() {
 
 int main() {
     try {
+        // 先跑 Day04 的功能正确性测试，再跑 Day05 的性能基准。
         test_basic_allocate_deallocate();
         test_reuse_address();
         test_expand_chunks();

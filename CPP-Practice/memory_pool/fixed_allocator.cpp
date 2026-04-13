@@ -6,6 +6,7 @@
 #include <new>
 
 FixedAllocator::~FixedAllocator() {
+    // 所有 chunk 都由 allocator 统一持有，析构时整批释放。
     for (const ChunkInfo& chunk : chunks_) {
         std::free(chunk.memory);
     }
@@ -21,6 +22,7 @@ void FixedAllocator::init(std::size_t block_size, std::size_t block_count) {
     used_count_ = 0;
     total_block_count_ = 0;
 
+    // block 至少要能放下一个 next 指针，才能串成 free list。
     block_size_ = std::max(block_size, sizeof(void*));
     initial_block_count_ = block_count;
     next_expand_count_ = block_count;
@@ -42,13 +44,14 @@ void FixedAllocator::expand() {
         throw std::bad_alloc();
     }
 
-    // 初始化时把每个 block 的前 sizeof(void*) 字节写成指向下一个 block。
+    // 新 chunk 内部先连成一条单独的 free list。
     for (std::size_t i = 0; i + 1 < next_expand_count_; ++i) {
         void* current = static_cast<char*>(new_chunk) + i * block_size_;
         void* next = static_cast<char*>(new_chunk) + (i + 1) * block_size_;
         *reinterpret_cast<void**>(current) = next;
     }
 
+    // 再把新 chunk 的尾节点挂到旧 free list 头上，完成拼接。
     void* last = static_cast<char*>(new_chunk) + (next_expand_count_ - 1) * block_size_;
     *reinterpret_cast<void**>(last) = free_list_;
     free_list_ = new_chunk;
@@ -66,6 +69,7 @@ void* FixedAllocator::allocate() {
         }
     }
 
+    // 头删 free list，O(1) 取出一个可用 block。
     void* block = free_list_;
     free_list_ = *reinterpret_cast<void**>(block);
     ++used_count_;
@@ -80,6 +84,7 @@ void FixedAllocator::deallocate(void* ptr) {
     char* current = static_cast<char*>(ptr);
     bool in_range = false;
 
+    // 只接受来自当前 allocator 管理区间内、且按 block_size 对齐的指针。
     for (const ChunkInfo& chunk : chunks_) {
         char* begin = static_cast<char*>(chunk.memory);
         char* end = begin + block_size_ * chunk.block_count;
@@ -91,6 +96,7 @@ void FixedAllocator::deallocate(void* ptr) {
     }
     assert(in_range);
 
+    // 头插回 free list，地址可立即被后续分配复用。
     *reinterpret_cast<void**>(ptr) = free_list_;
     free_list_ = ptr;
 
