@@ -1,10 +1,14 @@
 #include "fixed_allocator.h"
 
 #include <cassert>
+#include <chrono>
 #include <cstddef>
+#include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <random>
 #include <stdexcept>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -16,6 +20,71 @@
     } while (false)
 
 #define EXPECT_EQ(lhs, rhs) EXPECT_TRUE((lhs) == (rhs))
+
+constexpr int kBenchmarkIterations = 1'000'000;
+
+struct BenchmarkResult {
+    std::string name;
+    double elapsed_ms;
+};
+
+template <typename Fn>
+BenchmarkResult run_benchmark(const std::string& name, Fn&& fn) {
+    const auto start = std::chrono::high_resolution_clock::now();
+    fn();
+    const auto end = std::chrono::high_resolution_clock::now();
+    const auto elapsed = std::chrono::duration<double, std::milli>(end - start).count();
+    return BenchmarkResult{name, elapsed};
+}
+
+void run_day05_benchmark() {
+    volatile int sink = 0;
+
+    const BenchmarkResult new_delete = run_benchmark("new/delete", [&sink]() {
+        for (int i = 0; i < kBenchmarkIterations; ++i) {
+            int* p = new int;
+            *p = 42;
+            sink += *p;
+            delete p;
+        }
+    });
+
+    FixedAllocator allocator;
+    allocator.init(sizeof(int), static_cast<std::size_t>(kBenchmarkIterations));
+
+    const BenchmarkResult fixed_allocator = run_benchmark("FixedAllocator", [&allocator, &sink]() {
+        for (int i = 0; i < kBenchmarkIterations; ++i) {
+            void* p = allocator.allocate();
+            *static_cast<int*>(p) = 42;
+            sink += *static_cast<int*>(p);
+            allocator.deallocate(p);
+        }
+    });
+
+    const BenchmarkResult malloc_free = run_benchmark("malloc/free", [&sink]() {
+        for (int i = 0; i < kBenchmarkIterations; ++i) {
+            int* p = static_cast<int*>(std::malloc(sizeof(int)));
+            *p = 42;
+            sink += *p;
+            std::free(p);
+        }
+    });
+
+    const double ratio_vs_new = new_delete.elapsed_ms / fixed_allocator.elapsed_ms;
+    const double ratio_vs_malloc = malloc_free.elapsed_ms / fixed_allocator.elapsed_ms;
+
+    std::cout << std::fixed << std::setprecision(3);
+    std::cout << "Day 005 benchmark (" << kBenchmarkIterations << " iterations)\n";
+    std::cout << "  " << new_delete.name << ": " << new_delete.elapsed_ms << " ms\n";
+    std::cout << "  " << fixed_allocator.name << ": " << fixed_allocator.elapsed_ms << " ms\n";
+    std::cout << "  " << malloc_free.name << ": " << malloc_free.elapsed_ms << " ms\n";
+    std::cout << "  FixedAllocator speedup vs new/delete: " << ratio_vs_new << "x\n";
+    std::cout << "  FixedAllocator speedup vs malloc/free: " << ratio_vs_malloc << "x\n";
+
+    if (sink == 0) {
+        std::cout << "sink=" << sink << "\n";
+    }
+}
 
 void test_basic_allocate_deallocate() {
     FixedAllocator allocator;
@@ -121,8 +190,9 @@ int main() {
         test_reuse_address();
         test_expand_chunks();
         test_mixed_random_allocate_deallocate();
+        run_day05_benchmark();
     } catch (const std::exception& ex) {
-        std::cerr << "Day 004 unit tests failed: " << ex.what() << "\n";
+        std::cerr << "Tests or benchmark failed: " << ex.what() << "\n";
         return 1;
     }
 
