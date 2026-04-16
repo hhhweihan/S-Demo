@@ -7,8 +7,8 @@
 
 ## Month 1 — 内存管理（Week 01–04）
 
-- [ ] Week 01 | ____~____ | 固定内存池 FixedAllocator |
-- [ ] Week 02 | ____~____ | PoolAllocator + size class |
+- [x] Week 01 | 04/03~04/09 | 固定内存池 FixedAllocator |
+- [x] Week 02 | 04/10~04/16 | PoolAllocator + size class |
 - [ ] Week 03 | ____~____ | 手写智能指针 |
 - [ ] Week 04 | ____~____ | RAII + scope_guard + 整月验收 |
 

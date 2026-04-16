@@ -6,6 +6,8 @@ add_executable(memory_pool_demo
     main.cpp
     fixed_allocator.cpp
     fixed_allocator.h
+    pool_allocator.h
+    my_allocator.h
 )
 
 target_compile_features(memory_pool_demo PRIVATE cxx_std_17)

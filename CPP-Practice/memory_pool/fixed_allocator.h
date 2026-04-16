@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <mutex>
 #include <vector>
 
 class FixedAllocator {
@@ -15,6 +16,8 @@ public:
     void init(std::size_t block_size, std::size_t block_count);
     void* allocate();
     void deallocate(void* ptr);
+    std::size_t allocate_batch(void** blocks, std::size_t count);
+    void deallocate_batch(void** blocks, std::size_t count);
 
     struct Stats {
         std::size_t total;
@@ -31,6 +34,12 @@ private:
     };
 
     void expand();
+    void* allocate_locked();
+    void deallocate_locked(void* ptr);
+
+#ifndef NDEBUG
+    void assert_pointer_in_range_locked(void* ptr) const;
+#endif
 
     // 内存布局草图：
     //   chunk:
@@ -47,4 +56,5 @@ private:
     std::size_t used_count_ = 0;
     void* free_list_ = nullptr;
     std::vector<ChunkInfo> chunks_;
+    mutable std::mutex mutex_;
 };

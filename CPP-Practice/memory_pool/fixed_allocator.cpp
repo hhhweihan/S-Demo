@@ -3,9 +3,12 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
+#include <mutex>
 #include <new>
 
 FixedAllocator::~FixedAllocator() {
+    std::lock_guard<std::mutex> lock(mutex_);
+
     // 所有 chunk 都由 allocator 统一持有，析构时整批释放。
     for (const ChunkInfo& chunk : chunks_) {
         std::free(chunk.memory);
@@ -13,6 +16,8 @@ FixedAllocator::~FixedAllocator() {
 }
 
 void FixedAllocator::init(std::size_t block_size, std::size_t block_count) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
     for (const ChunkInfo& chunk : chunks_) {
         std::free(chunk.memory);
     }
@@ -61,7 +66,7 @@ void FixedAllocator::expand() {
     next_expand_count_ *= 2;
 }
 
-void* FixedAllocator::allocate() {
+void* FixedAllocator::allocate_locked() {
     if (free_list_ == nullptr) {
         expand();
         if (free_list_ == nullptr) {
@@ -76,11 +81,8 @@ void* FixedAllocator::allocate() {
     return block;
 }
 
-void FixedAllocator::deallocate(void* ptr) {
-    if (ptr == nullptr) {
-        return;
-    }
-
+#ifndef NDEBUG
+void FixedAllocator::assert_pointer_in_range_locked(void* ptr) const {
     char* current = static_cast<char*>(ptr);
     bool in_range = false;
 
@@ -95,6 +97,13 @@ void FixedAllocator::deallocate(void* ptr) {
         }
     }
     assert(in_range);
+}
+#endif
+
+void FixedAllocator::deallocate_locked(void* ptr) {
+#ifndef NDEBUG
+    assert_pointer_in_range_locked(ptr);
+#endif
 
     // 头插回 free list，地址可立即被后续分配复用。
     *reinterpret_cast<void**>(ptr) = free_list_;
@@ -105,6 +114,51 @@ void FixedAllocator::deallocate(void* ptr) {
     }
 }
 
+void* FixedAllocator::allocate() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return allocate_locked();
+}
+
+std::size_t FixedAllocator::allocate_batch(void** blocks, std::size_t count) {
+    if (blocks == nullptr || count == 0) {
+        return 0;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::size_t allocated = 0;
+    for (; allocated < count; ++allocated) {
+        void* block = allocate_locked();
+        if (block == nullptr) {
+            break;
+        }
+        blocks[allocated] = block;
+    }
+    return allocated;
+}
+
+void FixedAllocator::deallocate(void* ptr) {
+    if (ptr == nullptr) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    deallocate_locked(ptr);
+}
+
+void FixedAllocator::deallocate_batch(void** blocks, std::size_t count) {
+    if (blocks == nullptr || count == 0) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (std::size_t index = 0; index < count; ++index) {
+        if (blocks[index] != nullptr) {
+            deallocate_locked(blocks[index]);
+        }
+    }
+}
+
 FixedAllocator::Stats FixedAllocator::stats() const {
+    std::lock_guard<std::mutex> lock(mutex_);
     return Stats{total_block_count_, used_count_, chunks_.size()};
 }
