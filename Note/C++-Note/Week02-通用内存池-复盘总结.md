@@ -65,6 +65,8 @@ size class 是通用 allocator 的第一道分流逻辑。用户申请的是“�
 
 我当前这版显然偏向“教学友好”的粗粒度方案。
 
+
+
 ---
 
 ### Day 9 — 实现 PoolAllocator 核心（1h）
