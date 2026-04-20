@@ -9,7 +9,7 @@
 
 - [x] Week 01 | 04/03~04/09 | 固定内存池 FixedAllocator |
 - [x] Week 02 | 04/10~04/16 | PoolAllocator + size class |
-- [ ] Week 03 | ____~____ | 手写智能指针 |
+- [x] Week 03 | 04/17~04/23 | 手写智能指针 |
 - [ ] Week 04 | ____~____ | RAII + scope_guard + 整月验收 |
 
 ## Month 2 — 并发编程（Week 05–08）
