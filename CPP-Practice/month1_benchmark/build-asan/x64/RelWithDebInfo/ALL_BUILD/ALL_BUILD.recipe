@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ProjectOutputs>
+    <ProjectOutput>
+      <FullPath>D:\CodeSpace\S-Demo\CPP-Practice\month1_benchmark\build-asan\x64\RelWithDebInfo\ZERO_CHECK</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\CodeSpace\S-Demo\CPP-Practice\month1_benchmark\build-asan\RelWithDebInfo\month1_benchmark.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\CodeSpace\S-Demo\CPP-Practice\month1_benchmark\build-asan\x64\RelWithDebInfo\ALL_BUILD</FullPath>
+    </ProjectOutput>
+  </ProjectOutputs>
+  <ContentFiles />
+  <SatelliteDlls />
+  <NonRecipeFileRefs />
+</Project>

@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D:\CodeSpace\S-Demo\CPP-Practice\month1_benchmark\month1_benchmark.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\CodeSpace\S-Demo\CPP-Practice\memory_pool\fixed_allocator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="D:\CodeSpace\S-Demo\CPP-Practice\month1_benchmark\smart_ptr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\CodeSpace\S-Demo\CPP-Practice\memory_pool\fixed_allocator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\CodeSpace\S-Demo\CPP-Practice\memory_pool\pool_allocator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\CodeSpace\S-Demo\CPP-Practice\month1_benchmark\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{5F0085F8-380B-37F1-9968-1BCE6D2ACFA6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{975C1109-DD18-3A3D-A4E3-4E82A75C94EC}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

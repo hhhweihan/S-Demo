@@ -1,0 +1,10 @@
+^D:\CODESPACE\S-DEMO\CPP-PRACTICE\RAII\BUILD\CMAKEFILES\B9D7998B26F23E5150A5A30BF6B925BD\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SD:/CodeSpace/S-Demo/CPP-Practice/raii -BD:/CodeSpace/S-Demo/CPP-Practice/raii/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/CodeSpace/S-Demo/CPP-Practice/raii/build/raii_scope_guard_demo.slnx
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

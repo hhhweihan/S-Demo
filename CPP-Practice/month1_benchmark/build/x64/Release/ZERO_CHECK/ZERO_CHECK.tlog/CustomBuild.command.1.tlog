@@ -1,0 +1,10 @@
+^D:\CODESPACE\S-DEMO\CPP-PRACTICE\MONTH1_BENCHMARK\BUILD\CMAKEFILES\C538FE29B8D375CF4C45506F6599C446\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SD:/CodeSpace/S-Demo/CPP-Practice/month1_benchmark -BD:/CodeSpace/S-Demo/CPP-Practice/month1_benchmark/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/CodeSpace/S-Demo/CPP-Practice/month1_benchmark/build/month1_benchmark.slnx
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
