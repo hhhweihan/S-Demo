@@ -2,4 +2,10 @@
 .vscode/
 CPP-Practice/memory_pool/build/
 CPP-Practice/memory_pool/build-release/
+CPP-Practice/memory_pool/build-asan/
+CPP-Practice/memory_pool/build-vs/
+CPP-Practice/month1_benchmark/build/
+CPP-Practice/month1_benchmark/build-asan/
+CPP-Practice/raii/build/
+CPP-Practice/raii/*.txt
 
