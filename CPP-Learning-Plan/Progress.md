@@ -10,12 +10,12 @@
 - [x] Week 01 | 04/03~04/09 | 固定内存池 FixedAllocator |
 - [x] Week 02 | 04/10~04/16 | PoolAllocator + size class |
 - [x] Week 03 | 04/17~04/23 | 手写智能指针 |
-- [ ] Week 04 | ____~____ | RAII + scope_guard + 整月验收 |
+- [x] Week 04 | 04/24~04/30 | RAII + scope_guard + 整月验收 |
 
 ## Month 2 — 并发编程（Week 05–08）
 
-- [ ] Week 05 | ____~____ | BlockingQueue |
-- [ ] Week 06 | ____~____ | ThreadPool + future |
+- [x] Week 05 | 05/01~05/07 | BlockingQueue |
+- [x] Week 06 | 05/08~05/14 | ThreadPool + future |
 - [ ] Week 07 | ____~____ | 无锁队列 + memory_order |
 - [ ] Week 08 | ____~____ | RWMutex + CountDownLatch + 整月验收 |
 
