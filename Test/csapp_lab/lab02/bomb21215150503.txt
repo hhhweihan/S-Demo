@@ -1,0 +1,6 @@
+Wow! Brazil is big.
+1 2 4 8 16 32
+3 -408
+66 2
+BELDOG
+3 1 2 5 6 4

@@ -1,0 +1,509 @@
+
+linkbomb3:     file format elf64-x86-64
+
+
+Disassembly of section .init:
+
+00000000004003c8 <_init>:
+  4003c8:	48 83 ec 08          	sub    $0x8,%rsp
+  4003cc:	48 8b 05 25 0c 20 00 	mov    0x200c25(%rip),%rax        # 600ff8 <__gmon_start__>
+  4003d3:	48 85 c0             	test   %rax,%rax
+  4003d6:	74 02                	je     4003da <_init+0x12>
+  4003d8:	ff d0                	callq  *%rax
+  4003da:	48 83 c4 08          	add    $0x8,%rsp
+  4003de:	c3                   	retq   
+
+Disassembly of section .plt:
+
+00000000004003e0 <.plt>:
+  4003e0:	ff 35 22 0c 20 00    	pushq  0x200c22(%rip)        # 601008 <_GLOBAL_OFFSET_TABLE_+0x8>
+  4003e6:	ff 25 24 0c 20 00    	jmpq   *0x200c24(%rip)        # 601010 <_GLOBAL_OFFSET_TABLE_+0x10>
+  4003ec:	0f 1f 40 00          	nopl   0x0(%rax)
+
+00000000004003f0 <puts@plt>:
+  4003f0:	ff 25 22 0c 20 00    	jmpq   *0x200c22(%rip)        # 601018 <puts@GLIBC_2.2.5>
+  4003f6:	68 00 00 00 00       	pushq  $0x0
+  4003fb:	e9 e0 ff ff ff       	jmpq   4003e0 <.plt>
+
+Disassembly of section .text:
+
+0000000000400400 <_start>:
+  400400:	31 ed                	xor    %ebp,%ebp
+  400402:	49 89 d1             	mov    %rdx,%r9
+  400405:	5e                   	pop    %rsi
+  400406:	48 89 e2             	mov    %rsp,%rdx
+  400409:	48 83 e4 f0          	and    $0xfffffffffffffff0,%rsp
+  40040d:	50                   	push   %rax
+  40040e:	54                   	push   %rsp
+  40040f:	49 c7 c0 00 07 40 00 	mov    $0x400700,%r8
+  400416:	48 c7 c1 90 06 40 00 	mov    $0x400690,%rcx
+  40041d:	48 c7 c7 e7 04 40 00 	mov    $0x4004e7,%rdi
+  400424:	ff 15 c6 0b 20 00    	callq  *0x200bc6(%rip)        # 600ff0 <__libc_start_main@GLIBC_2.2.5>
+  40042a:	f4                   	hlt    
+  40042b:	0f 1f 44 00 00       	nopl   0x0(%rax,%rax,1)
+
+0000000000400430 <_dl_relocate_static_pie>:
+  400430:	f3 c3                	repz retq 
+  400432:	66 2e 0f 1f 84 00 00 	nopw   %cs:0x0(%rax,%rax,1)
+  400439:	00 00 00 
+  40043c:	0f 1f 40 00          	nopl   0x0(%rax)
+
+0000000000400440 <deregister_tm_clones>:
+  400440:	55                   	push   %rbp
+  400441:	b8 f0 10 60 00       	mov    $0x6010f0,%eax
+  400446:	48 3d f0 10 60 00    	cmp    $0x6010f0,%rax
+  40044c:	48 89 e5             	mov    %rsp,%rbp
+  40044f:	74 17                	je     400468 <deregister_tm_clones+0x28>
+  400451:	b8 00 00 00 00       	mov    $0x0,%eax
+  400456:	48 85 c0             	test   %rax,%rax
+  400459:	74 0d                	je     400468 <deregister_tm_clones+0x28>
+  40045b:	5d                   	pop    %rbp
+  40045c:	bf f0 10 60 00       	mov    $0x6010f0,%edi
+  400461:	ff e0                	jmpq   *%rax
+  400463:	0f 1f 44 00 00       	nopl   0x0(%rax,%rax,1)
+  400468:	5d                   	pop    %rbp
+  400469:	c3                   	retq   
+  40046a:	66 0f 1f 44 00 00    	nopw   0x0(%rax,%rax,1)
+
+0000000000400470 <register_tm_clones>:
+  400470:	be f0 10 60 00       	mov    $0x6010f0,%esi
+  400475:	55                   	push   %rbp
+  400476:	48 81 ee f0 10 60 00 	sub    $0x6010f0,%rsi
+  40047d:	48 89 e5             	mov    %rsp,%rbp
+  400480:	48 c1 fe 03          	sar    $0x3,%rsi
+  400484:	48 89 f0             	mov    %rsi,%rax
+  400487:	48 c1 e8 3f          	shr    $0x3f,%rax
+  40048b:	48 01 c6             	add    %rax,%rsi
+  40048e:	48 d1 fe             	sar    %rsi
+  400491:	74 15                	je     4004a8 <register_tm_clones+0x38>
+  400493:	b8 00 00 00 00       	mov    $0x0,%eax
+  400498:	48 85 c0             	test   %rax,%rax
+  40049b:	74 0b                	je     4004a8 <register_tm_clones+0x38>
+  40049d:	5d                   	pop    %rbp
+  40049e:	bf f0 10 60 00       	mov    $0x6010f0,%edi
+  4004a3:	ff e0                	jmpq   *%rax
+  4004a5:	0f 1f 00             	nopl   (%rax)
+  4004a8:	5d                   	pop    %rbp
+  4004a9:	c3                   	retq   
+  4004aa:	66 0f 1f 44 00 00    	nopw   0x0(%rax,%rax,1)
+
+00000000004004b0 <__do_global_dtors_aux>:
+  4004b0:	80 3d 39 0c 20 00 00 	cmpb   $0x0,0x200c39(%rip)        # 6010f0 <__TMC_END__>
+  4004b7:	75 17                	jne    4004d0 <__do_global_dtors_aux+0x20>
+  4004b9:	55                   	push   %rbp
+  4004ba:	48 89 e5             	mov    %rsp,%rbp
+  4004bd:	e8 7e ff ff ff       	callq  400440 <deregister_tm_clones>
+  4004c2:	c6 05 27 0c 20 00 01 	movb   $0x1,0x200c27(%rip)        # 6010f0 <__TMC_END__>
+  4004c9:	5d                   	pop    %rbp
+  4004ca:	c3                   	retq   
+  4004cb:	0f 1f 44 00 00       	nopl   0x0(%rax,%rax,1)
+  4004d0:	f3 c3                	repz retq 
+  4004d2:	0f 1f 40 00          	nopl   0x0(%rax)
+  4004d6:	66 2e 0f 1f 84 00 00 	nopw   %cs:0x0(%rax,%rax,1)
+  4004dd:	00 00 00 
+
+00000000004004e0 <frame_dummy>:
+  4004e0:	55                   	push   %rbp
+  4004e1:	48 89 e5             	mov    %rsp,%rbp
+  4004e4:	5d                   	pop    %rbp
+  4004e5:	eb 89                	jmp    400470 <register_tm_clones>
+
+00000000004004e7 <main>:
+  4004e7:	55                   	push   %rbp
+  4004e8:	48 89 e5             	mov    %rsp,%rbp
+  4004eb:	48 83 ec 10          	sub    $0x10,%rsp
+  4004ef:	89 7d fc             	mov    %edi,-0x4(%rbp)
+  4004f2:	48 89 75 f0          	mov    %rsi,-0x10(%rbp)
+  4004f6:	48 8b 05 eb 0b 20 00 	mov    0x200beb(%rip),%rax        # 6010e8 <phase>
+  4004fd:	48 85 c0             	test   %rax,%rax
+  400500:	74 10                	je     400512 <main+0x2b>
+  400502:	48 8b 15 df 0b 20 00 	mov    0x200bdf(%rip),%rdx        # 6010e8 <phase>
+  400509:	b8 00 00 00 00       	mov    $0x0,%eax
+  40050e:	ff d2                	callq  *%rdx
+  400510:	eb 0a                	jmp    40051c <main+0x35>
+  400512:	bf 18 07 40 00       	mov    $0x400718,%edi
+  400517:	e8 d4 fe ff ff       	callq  4003f0 <puts@plt>
+  40051c:	b8 00 00 00 00       	mov    $0x0,%eax
+  400521:	c9                   	leaveq 
+  400522:	c3                   	retq   
+
+0000000000400523 <myFunc1>:
+  400523:	55                   	push   %rbp
+  400524:	48 89 e5             	mov    %rsp,%rbp
+  400527:	48 83 ec 10          	sub    $0x10,%rsp
+  40052b:	48 89 7d f8          	mov    %rdi,-0x8(%rbp)
+  40052f:	48 8b 45 f8          	mov    -0x8(%rbp),%rax
+  400533:	48 89 c7             	mov    %rax,%rdi
+  400536:	e8 b5 fe ff ff       	callq  4003f0 <puts@plt>
+  40053b:	90                   	nop
+  40053c:	c9                   	leaveq 
+  40053d:	c3                   	retq   
+
+000000000040053e <myFunc2>:
+  40053e:	55                   	push   %rbp
+  40053f:	48 89 e5             	mov    %rsp,%rbp
+  400542:	48 c7 45 f8 77 10 60 	movq   $0x601077,-0x8(%rbp)
+  400549:	00 
+  40054a:	48 8b 45 f8          	mov    -0x8(%rbp),%rax
+  40054e:	5d                   	pop    %rbp
+  40054f:	c3                   	retq   
+
+0000000000400550 <do_phase3>:
+  400550:	55                   	push   %rbp
+  400551:	48 89 e5             	mov    %rsp,%rbp
+  400554:	90                   	nop
+  400555:	90                   	nop
+  400556:	90                   	nop
+  400557:	90                   	nop
+  400558:	90                   	nop
+  400559:	90                   	nop
+  40055a:	90                   	nop
+  40055b:	90                   	nop
+  40055c:	90                   	nop
+  40055d:	90                   	nop
+  40055e:	90                   	nop
+  40055f:	90                   	nop
+  400560:	90                   	nop
+  400561:	90                   	nop
+  400562:	90                   	nop
+  400563:	90                   	nop
+  400564:	90                   	nop
+  400565:	90                   	nop
+  400566:	90                   	nop
+  400567:	90                   	nop
+  400568:	90                   	nop
+  400569:	90                   	nop
+  40056a:	90                   	nop
+  40056b:	90                   	nop
+  40056c:	90                   	nop
+  40056d:	90                   	nop
+  40056e:	90                   	nop
+  40056f:	90                   	nop
+  400570:	90                   	nop
+  400571:	90                   	nop
+  400572:	90                   	nop
+  400573:	90                   	nop
+  400574:	90                   	nop
+  400575:	90                   	nop
+  400576:	90                   	nop
+  400577:	90                   	nop
+  400578:	90                   	nop
+  400579:	90                   	nop
+  40057a:	90                   	nop
+  40057b:	90                   	nop
+  40057c:	90                   	nop
+  40057d:	90                   	nop
+  40057e:	90                   	nop
+  40057f:	90                   	nop
+  400580:	90                   	nop
+  400581:	90                   	nop
+  400582:	90                   	nop
+  400583:	90                   	nop
+  400584:	90                   	nop
+  400585:	90                   	nop
+  400586:	90                   	nop
+  400587:	90                   	nop
+  400588:	90                   	nop
+  400589:	90                   	nop
+  40058a:	90                   	nop
+  40058b:	90                   	nop
+  40058c:	90                   	nop
+  40058d:	90                   	nop
+  40058e:	90                   	nop
+  40058f:	90                   	nop
+  400590:	90                   	nop
+  400591:	90                   	nop
+  400592:	90                   	nop
+  400593:	90                   	nop
+  400594:	90                   	nop
+  400595:	90                   	nop
+  400596:	90                   	nop
+  400597:	90                   	nop
+  400598:	90                   	nop
+  400599:	90                   	nop
+  40059a:	90                   	nop
+  40059b:	90                   	nop
+  40059c:	90                   	nop
+  40059d:	90                   	nop
+  40059e:	90                   	nop
+  40059f:	90                   	nop
+  4005a0:	90                   	nop
+  4005a1:	90                   	nop
+  4005a2:	90                   	nop
+  4005a3:	90                   	nop
+  4005a4:	90                   	nop
+  4005a5:	90                   	nop
+  4005a6:	90                   	nop
+  4005a7:	90                   	nop
+  4005a8:	90                   	nop
+  4005a9:	90                   	nop
+  4005aa:	90                   	nop
+  4005ab:	90                   	nop
+  4005ac:	90                   	nop
+  4005ad:	90                   	nop
+  4005ae:	90                   	nop
+  4005af:	90                   	nop
+  4005b0:	90                   	nop
+  4005b1:	90                   	nop
+  4005b2:	90                   	nop
+  4005b3:	90                   	nop
+  4005b4:	90                   	nop
+  4005b5:	90                   	nop
+  4005b6:	90                   	nop
+  4005b7:	90                   	nop
+  4005b8:	90                   	nop
+  4005b9:	90                   	nop
+  4005ba:	90                   	nop
+  4005bb:	90                   	nop
+  4005bc:	90                   	nop
+  4005bd:	90                   	nop
+  4005be:	90                   	nop
+  4005bf:	90                   	nop
+  4005c0:	90                   	nop
+  4005c1:	90                   	nop
+  4005c2:	90                   	nop
+  4005c3:	90                   	nop
+  4005c4:	90                   	nop
+  4005c5:	90                   	nop
+  4005c6:	90                   	nop
+  4005c7:	90                   	nop
+  4005c8:	90                   	nop
+  4005c9:	90                   	nop
+  4005ca:	90                   	nop
+  4005cb:	90                   	nop
+  4005cc:	90                   	nop
+  4005cd:	90                   	nop
+  4005ce:	90                   	nop
+  4005cf:	90                   	nop
+  4005d0:	90                   	nop
+  4005d1:	90                   	nop
+  4005d2:	90                   	nop
+  4005d3:	90                   	nop
+  4005d4:	90                   	nop
+  4005d5:	90                   	nop
+  4005d6:	90                   	nop
+  4005d7:	90                   	nop
+  4005d8:	90                   	nop
+  4005d9:	90                   	nop
+  4005da:	90                   	nop
+  4005db:	90                   	nop
+  4005dc:	90                   	nop
+  4005dd:	90                   	nop
+  4005de:	90                   	nop
+  4005df:	90                   	nop
+  4005e0:	90                   	nop
+  4005e1:	90                   	nop
+  4005e2:	90                   	nop
+  4005e3:	90                   	nop
+  4005e4:	90                   	nop
+  4005e5:	90                   	nop
+  4005e6:	90                   	nop
+  4005e7:	90                   	nop
+  4005e8:	90                   	nop
+  4005e9:	90                   	nop
+  4005ea:	90                   	nop
+  4005eb:	90                   	nop
+  4005ec:	90                   	nop
+  4005ed:	90                   	nop
+  4005ee:	90                   	nop
+  4005ef:	90                   	nop
+  4005f0:	90                   	nop
+  4005f1:	90                   	nop
+  4005f2:	90                   	nop
+  4005f3:	90                   	nop
+  4005f4:	90                   	nop
+  4005f5:	90                   	nop
+  4005f6:	90                   	nop
+  4005f7:	90                   	nop
+  4005f8:	90                   	nop
+  4005f9:	90                   	nop
+  4005fa:	90                   	nop
+  4005fb:	90                   	nop
+  4005fc:	90                   	nop
+  4005fd:	90                   	nop
+  4005fe:	90                   	nop
+  4005ff:	90                   	nop
+  400600:	90                   	nop
+  400601:	90                   	nop
+  400602:	90                   	nop
+  400603:	90                   	nop
+  400604:	90                   	nop
+  400605:	90                   	nop
+  400606:	90                   	nop
+  400607:	90                   	nop
+  400608:	90                   	nop
+  400609:	90                   	nop
+  40060a:	90                   	nop
+  40060b:	90                   	nop
+  40060c:	90                   	nop
+  40060d:	90                   	nop
+  40060e:	90                   	nop
+  40060f:	90                   	nop
+  400610:	90                   	nop
+  400611:	90                   	nop
+  400612:	90                   	nop
+  400613:	90                   	nop
+  400614:	90                   	nop
+  400615:	90                   	nop
+  400616:	90                   	nop
+  400617:	90                   	nop
+  400618:	90                   	nop
+  400619:	90                   	nop
+  40061a:	90                   	nop
+  40061b:	90                   	nop
+  40061c:	90                   	nop
+  40061d:	90                   	nop
+  40061e:	90                   	nop
+  40061f:	90                   	nop
+  400620:	90                   	nop
+  400621:	90                   	nop
+  400622:	90                   	nop
+  400623:	90                   	nop
+  400624:	90                   	nop
+  400625:	90                   	nop
+  400626:	90                   	nop
+  400627:	90                   	nop
+  400628:	90                   	nop
+  400629:	90                   	nop
+  40062a:	90                   	nop
+  40062b:	90                   	nop
+  40062c:	90                   	nop
+  40062d:	90                   	nop
+  40062e:	90                   	nop
+  40062f:	90                   	nop
+  400630:	90                   	nop
+  400631:	90                   	nop
+  400632:	90                   	nop
+  400633:	90                   	nop
+  400634:	90                   	nop
+  400635:	90                   	nop
+  400636:	90                   	nop
+  400637:	90                   	nop
+  400638:	90                   	nop
+  400639:	90                   	nop
+  40063a:	90                   	nop
+  40063b:	90                   	nop
+  40063c:	90                   	nop
+  40063d:	90                   	nop
+  40063e:	90                   	nop
+  40063f:	90                   	nop
+  400640:	90                   	nop
+  400641:	90                   	nop
+  400642:	90                   	nop
+  400643:	90                   	nop
+  400644:	90                   	nop
+  400645:	90                   	nop
+  400646:	90                   	nop
+  400647:	90                   	nop
+  400648:	90                   	nop
+  400649:	90                   	nop
+  40064a:	90                   	nop
+  40064b:	90                   	nop
+  40064c:	90                   	nop
+  40064d:	90                   	nop
+  40064e:	90                   	nop
+  40064f:	90                   	nop
+  400650:	90                   	nop
+  400651:	90                   	nop
+  400652:	90                   	nop
+  400653:	90                   	nop
+  400654:	90                   	nop
+  400655:	90                   	nop
+  400656:	90                   	nop
+  400657:	90                   	nop
+  400658:	90                   	nop
+  400659:	90                   	nop
+  40065a:	90                   	nop
+  40065b:	90                   	nop
+  40065c:	90                   	nop
+  40065d:	90                   	nop
+  40065e:	90                   	nop
+  40065f:	90                   	nop
+  400660:	90                   	nop
+  400661:	90                   	nop
+  400662:	90                   	nop
+  400663:	90                   	nop
+  400664:	90                   	nop
+  400665:	90                   	nop
+  400666:	90                   	nop
+  400667:	90                   	nop
+  400668:	90                   	nop
+  400669:	90                   	nop
+  40066a:	90                   	nop
+  40066b:	90                   	nop
+  40066c:	90                   	nop
+  40066d:	90                   	nop
+  40066e:	90                   	nop
+  40066f:	90                   	nop
+  400670:	90                   	nop
+  400671:	90                   	nop
+  400672:	90                   	nop
+  400673:	90                   	nop
+  400674:	90                   	nop
+  400675:	90                   	nop
+  400676:	90                   	nop
+  400677:	90                   	nop
+  400678:	90                   	nop
+  400679:	90                   	nop
+  40067a:	90                   	nop
+  40067b:	90                   	nop
+  40067c:	90                   	nop
+  40067d:	90                   	nop
+  40067e:	90                   	nop
+  40067f:	90                   	nop
+  400680:	90                   	nop
+  400681:	5d                   	pop    %rbp
+  400682:	c3                   	retq   
+  400683:	66 2e 0f 1f 84 00 00 	nopw   %cs:0x0(%rax,%rax,1)
+  40068a:	00 00 00 
+  40068d:	0f 1f 00             	nopl   (%rax)
+
+0000000000400690 <__libc_csu_init>:
+  400690:	41 57                	push   %r15
+  400692:	41 56                	push   %r14
+  400694:	49 89 d7             	mov    %rdx,%r15
+  400697:	41 55                	push   %r13
+  400699:	41 54                	push   %r12
+  40069b:	4c 8d 25 6e 07 20 00 	lea    0x20076e(%rip),%r12        # 600e10 <__frame_dummy_init_array_entry>
+  4006a2:	55                   	push   %rbp
+  4006a3:	48 8d 2d 6e 07 20 00 	lea    0x20076e(%rip),%rbp        # 600e18 <__init_array_end>
+  4006aa:	53                   	push   %rbx
+  4006ab:	41 89 fd             	mov    %edi,%r13d
+  4006ae:	49 89 f6             	mov    %rsi,%r14
+  4006b1:	4c 29 e5             	sub    %r12,%rbp
+  4006b4:	48 83 ec 08          	sub    $0x8,%rsp
+  4006b8:	48 c1 fd 03          	sar    $0x3,%rbp
+  4006bc:	e8 07 fd ff ff       	callq  4003c8 <_init>
+  4006c1:	48 85 ed             	test   %rbp,%rbp
+  4006c4:	74 20                	je     4006e6 <__libc_csu_init+0x56>
+  4006c6:	31 db                	xor    %ebx,%ebx
+  4006c8:	0f 1f 84 00 00 00 00 	nopl   0x0(%rax,%rax,1)
+  4006cf:	00 
+  4006d0:	4c 89 fa             	mov    %r15,%rdx
+  4006d3:	4c 89 f6             	mov    %r14,%rsi
+  4006d6:	44 89 ef             	mov    %r13d,%edi
+  4006d9:	41 ff 14 dc          	callq  *(%r12,%rbx,8)
+  4006dd:	48 83 c3 01          	add    $0x1,%rbx
+  4006e1:	48 39 dd             	cmp    %rbx,%rbp
+  4006e4:	75 ea                	jne    4006d0 <__libc_csu_init+0x40>
+  4006e6:	48 83 c4 08          	add    $0x8,%rsp
+  4006ea:	5b                   	pop    %rbx
+  4006eb:	5d                   	pop    %rbp
+  4006ec:	41 5c                	pop    %r12
+  4006ee:	41 5d                	pop    %r13
+  4006f0:	41 5e                	pop    %r14
+  4006f2:	41 5f                	pop    %r15
+  4006f4:	c3                   	retq   
+  4006f5:	90                   	nop
+  4006f6:	66 2e 0f 1f 84 00 00 	nopw   %cs:0x0(%rax,%rax,1)
+  4006fd:	00 00 00 
+
+0000000000400700 <__libc_csu_fini>:
+  400700:	f3 c3                	repz retq 
+
+Disassembly of section .fini:
+
+0000000000400704 <_fini>:
+  400704:	48 83 ec 08          	sub    $0x8,%rsp
+  400708:	48 83 c4 08          	add    $0x8,%rsp
+  40070c:	c3                   	retq   
