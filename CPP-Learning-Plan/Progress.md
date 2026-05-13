@@ -17,7 +17,7 @@
 - [x] Week 05 | 05/01~05/07 | BlockingQueue |
 - [x] Week 06 | 05/08~05/14 | ThreadPool + future |
 - [x] Week 07 | 05/15~05/21 | 无锁队列 + memory_order |
-- [ ] Week 08 | ____~____ | RWMutex + CountDownLatch + 整月验收 |
+- [x] Week 08 | 05/22~05/28 | RWMutex + CountDownLatch + 整月验收 |
 
 ## Month 3 — 模板泛型（Week 09–12）
 

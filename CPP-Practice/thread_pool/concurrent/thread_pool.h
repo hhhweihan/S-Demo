@@ -1,6 +1,7 @@
 #pragma once
 
 #include "concurrent/blocking_queue.h"
+#include "concurrent/countdown_latch.h"
 #include "concurrent/joining_thread.h"
 
 #include <atomic>
@@ -36,6 +37,8 @@ public:
         std::size_t active_workers = 0;
         std::size_t target_workers = 0;
         std::size_t queue_size = 0;
+        bool accepting = false;
+        bool paused = false;
     };
 
     explicit ThreadPool(std::size_t worker_count)
@@ -89,12 +92,23 @@ public:
     }
 
     void await_termination() {
-        std::unique_lock<std::mutex> lock(completion_mutex_);
-        completion_cv_.wait(lock, [this] {
-            return pending_tasks_.load(std::memory_order_acquire) == 0;
-        });
-        lock.unlock();
+        pending_latch_.wait();
         shutdown();
+    }
+
+    void pause() {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (accepting_) {
+            paused_ = true;
+        }
+    }
+
+    void resume() {
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            paused_ = false;
+        }
+        pause_cv_.notify_all();
     }
 
     void shutdown() {
@@ -106,7 +120,9 @@ public:
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
             accepting_ = false;
+            paused_ = false;
         }
+        pause_cv_.notify_all();
 
         if (monitor_thread_ != nullptr) {
             monitor_thread_->join();
@@ -127,32 +143,41 @@ public:
     }
 
     Stats snapshot_stats() const {
+        std::lock_guard<std::mutex> lock(state_mutex_);
         return Stats{submitted_tasks_.load(std::memory_order_relaxed),
                      completed_tasks_.load(std::memory_order_relaxed),
                      rejected_tasks_.load(std::memory_order_relaxed),
                      pending_tasks_.load(std::memory_order_relaxed),
                      active_count_.load(std::memory_order_relaxed),
                      target_worker_count_.load(std::memory_order_relaxed),
-                     queue_.size()};
+                     queue_.size(),
+                     accepting_,
+                     paused_};
     }
 
 private:
     void enqueue_task(Task task) {
         {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            if (!accepting_) {
+            std::unique_lock<std::mutex> lock(state_mutex_);
+            pause_cv_.wait(lock, [this] {
+                return !paused_ || !accepting_ || !running_.load(std::memory_order_acquire);
+            });
+
+            if (!accepting_ || !running_.load(std::memory_order_acquire)) {
                 rejected_tasks_.fetch_add(1, std::memory_order_relaxed);
                 throw std::runtime_error("submit on stopped ThreadPool");
             }
 
             submitted_tasks_.fetch_add(1, std::memory_order_relaxed);
             pending_tasks_.fetch_add(1, std::memory_order_relaxed);
+            pending_latch_.count_up();
         }
 
         try {
             queue_.push(std::move(task));
         } catch (...) {
             pending_tasks_.fetch_sub(1, std::memory_order_relaxed);
+            pending_latch_.count_down();
             rejected_tasks_.fetch_add(1, std::memory_order_relaxed);
             throw;
         }
@@ -214,6 +239,7 @@ private:
             const std::size_t remaining =
                 pending_tasks_.fetch_sub(1, std::memory_order_acq_rel) - 1;
             completed_tasks_.fetch_add(1, std::memory_order_relaxed);
+            pending_latch_.count_down();
             if (remaining == 0) {
                 std::lock_guard<std::mutex> lock(completion_mutex_);
                 completion_cv_.notify_all();
@@ -253,14 +279,17 @@ private:
     mutable std::mutex workers_mutex_;
     mutable std::mutex completion_mutex_;
     std::condition_variable completion_cv_;
+    std::condition_variable pause_cv_;
 
     ThreadPoolOptions options_;
     std::vector<JoiningThread> workers_;
     std::unique_ptr<JoiningThread> monitor_thread_;
     BlockingQueue<Task> queue_;
+    CountDownLatch pending_latch_{0};
 
     std::atomic<bool> running_{true};
     bool accepting_ = true;
+    bool paused_ = false;
     std::atomic<std::size_t> active_count_{0};
     std::atomic<std::size_t> target_worker_count_{0};
     std::atomic<std::size_t> worker_exit_tokens_{0};

@@ -6,6 +6,8 @@ add_executable(thread_pool_demo
     main.cpp
     concurrent/joining_thread.h
     concurrent/blocking_queue.h
+    concurrent/countdown_latch.h
+    concurrent/rw_mutex.h
     concurrent/thread_pool.h
 )
 

@@ -9,4 +9,5 @@ CPP-Practice/month1_benchmark/build-asan/
 CPP-Practice/raii/build/
 CPP-Practice/raii/*.txt
 CPP-Practice/lock_free/build/
+CPP-Practice/thread_pool/build/
 
