@@ -1,15 +1,21 @@
-# 这里存的都是一些测试代码笔记
+# Test
 
-## csapplab文件夹 存放自己csapp上做的lab
-1. lab1 datalab
-2. lab2 bomblab
-3. lab3 attacklab
-4. lab4 archlab
-5. lab5 cachelab
-6. lab6 tshlab
-7. lab7 malloclab
-8. lab8 proxylab
+## 这个目录是干什么的
 
-## Linux_C_C++ 笔记
+这里主要存放早期学习阶段留下的测试代码、课程实验和零散练习记录，属于历史归档目录，不再承担当前主线学习的入口职责。
 
-## test_code 测试代码(无用)
+当前保留的内容主要包括：
+
+- `csapp_lab`：CS:APP 课程实验记录
+- `Linux_C_C++`：早期 C / C++ 学习笔记与示例
+- `test_code`：零散测试代码
+
+这个目录主要是留档，平时不会专门维护，最多是偶尔回来补一点说明。
+
+## 从哪里开始看
+
+- 如果你想看课程实验，先从 `csapp_lab` 开始
+- 如果你想看早期 C / C++ 学习记录，先看 `Linux_C_C++`
+- 如果你只关心当前主线，建议回到仓库根目录，从 `CPP-Learning-Plan` 和 `CPP-Practice` 开始
+
+这里面有些内容能跑，有些只是留档，构建方式也不统一，要按具体子目录自己判断。
