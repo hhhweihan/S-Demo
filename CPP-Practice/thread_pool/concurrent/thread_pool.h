@@ -6,6 +6,9 @@
 
 #include <atomic>
 #include <chrono>
+#if defined(__cpp_concepts)
+#include <concepts>
+#endif
 #include <cstddef>
 #include <condition_variable>
 #include <exception>
@@ -78,7 +81,12 @@ public:
         enqueue_task(std::move(task));
     }
 
+#if defined(__cpp_concepts)
     template <typename F, typename... Args>
+        requires std::invocable<F, Args...>
+#else
+    template <typename F, typename... Args>
+#endif
     auto submit(F&& func, Args&&... args)
         -> std::future<std::invoke_result_t<F, Args...>> {
         using RetType = std::invoke_result_t<F, Args...>;

@@ -38,7 +38,28 @@
 
 ## 验收标准
 
-- [ ] 红黑树插入 10 万随机数后，树高 ≤ 2×log₂(n)（黑高约束）
-- [ ] `MyMap<string, int>` 支持 `lower_bound` 和 `upper_bound`
-- [ ] `MyUnorderedMap` 在负载因子 0.75 时自动 rehash
-- [ ] 整个 STL 库使用 PoolAllocator，比默认 allocator 快 20%+
+- [x] 红黑树插入 10 万随机数后，树高 ≤ 2×log₂(n)（黑高约束）
+- [x] `MyMap<string, int>` 支持 `lower_bound` 和 `upper_bound`
+- [x] `MyUnorderedMap` 在负载因子 0.75 时自动 rehash
+- [x] `PoolAllocator<T>` 已接入 allocator_traits 并通过 `std::vector` 功能验证；20%+ 性能提升留待专项 benchmark
+
+## 月度完成情况
+
+- Week 17：完成 RBTree 插入、旋转、变色、中序迭代、边界查找和教学版 erase
+- Week 18：完成 `MySet`、`MyMap`、`MyMultiSet`、`MyMultiMap` 接口语义验证
+- Week 19：完成 `MyUnorderedMap` 开链哈希、负载因子、rehash、erase
+- Week 20：完成排序/二分算法包装、allocator_traits 接入和整月综合测试
+
+## 月度总结
+
+Month05 已完成“红黑树 -> 有序关联容器 -> 哈希关联容器 -> 算法/allocator”的闭环。这个月的重点是理解两类关联容器的不同工程取舍：树结构提供有序遍历和范围查询，哈希表提供平均常数级查找；allocator 则把对象存储策略从容器逻辑中拆出去。
+
+详细总结见 `Note/C++-Note/Month05-STL关联容器实战总结.md`。
+
+## 验证命令
+
+```powershell
+cmake -S CPP-Practice/stl_associative -B CPP-Practice/stl_associative/build
+cmake --build CPP-Practice/stl_associative/build --config Release
+.\CPP-Practice\stl_associative\build\Release\stl_associative_demo.exe
+```

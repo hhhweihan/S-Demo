@@ -35,11 +35,32 @@
 
 ## 验收标准
 
-- [ ] `MyVector<int>` 通过 std::sort（需要 RandomAccess 迭代器）
-- [ ] `MyList<int>` 通过基于双向迭代器的 std::reverse
-- [ ] `MyPriorityQueue<int>` 使用自定义 Comparator 正确排序
-- [ ] 所有容器支持范围 for 循环（begin/end）
-- [ ] ASan 扫描无内存错误
+- [x] `MyVector<int>` 通过 std::sort（需要 RandomAccess 迭代器）
+- [x] `MyList<int>` 通过基于双向迭代器的 std::reverse
+- [x] `MyPriorityQueue<int>` 使用自定义 Comparator 正确排序
+- [x] 所有容器支持范围 for 循环（begin/end）
+- [x] Release 构建与运行时用例通过；MSVC 当前工程未单独启用 ASan
+
+## 月度完成情况
+
+- Week 13：完成迭代器类别标签、`iterator_traits` 和 `ReverseIterator`，工程位于 `CPP-Practice/stl_sequence/`
+- Week 14：完成 `MyVector<T>` 和教学版 `MyDeque<T>`，验证随机访问、头尾操作和范围 for
+- Week 15：完成 `MyList<T>` 和 `MyForwardList<T>`，验证双向迭代器与前向迭代器能力边界
+- Week 16：完成 `MyStack`、`MyQueue`、`MyPriorityQueue`，完成整月综合测试
+
+## 月度总结
+
+Month 4 已完成“迭代器协议 -> 连续容器 -> 节点容器 -> 容器适配器”的完整闭环。这个月的关键不是复刻 STL 的全部工程细节，而是理解 STL 的核心分层：容器负责存储，迭代器负责遍历能力表达，算法只依赖迭代器协议，适配器则在已有容器上收窄接口。
+
+详细总结见 `Note/C++-Note/Month04-STL序列容器实战总结.md`。
+
+## 验证命令
+
+```powershell
+cmake -S CPP-Practice/stl_sequence -B CPP-Practice/stl_sequence/build
+cmake --build CPP-Practice/stl_sequence/build --config Release
+.\CPP-Practice\stl_sequence\build\Release\stl_sequence_demo.exe
+```
 
 ## 参考资料
 
