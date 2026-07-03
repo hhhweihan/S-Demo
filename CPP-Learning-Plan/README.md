@@ -4,20 +4,20 @@
 
 ## 路线总览
 
-| 月份 | 主题 | 核心产出 |
-| --- | --- | --- |
-| Month 01 | 内存管理实战 | 内存池库 + 手写智能指针 |
-| Month 02 | 并发编程实战 | 线程池库 + SPSC 无锁队列 |
-| Month 03 | 模板与泛型深入 | 手写 tuple / variant / type_list |
-| Month 04 | 自编 STL（序列容器） | MyVector / MyDeque / MyList + 迭代器体系 |
-| Month 05 | 自编 STL（关联容器） | 红黑树 + set/map + unordered_map + 算法 |
-| Month 06 | 异步日志系统 | 双缓冲异步日志 + 多 Sink + PoolAllocator 接入 |
-| Month 07 | LevelDB 源码精读 | SkipList + Arena + SSTable + Compaction 仿写 |
-| Month 08 | 网络编程 | Reactor 框架 + HTTP Server |
-| Month 09 | 高性能网络库 | io_uring + 定时器轮 + 连接池 |
-| Month 10 | 协程库 | ucontext Fiber + 调度器 + Channel |
-| Month 11 | RPC 框架 | protobuf + 帧协议 + 服务发现 |
-| Month 12 | Mini Raft KV | Leader 选举 + 日志复制 + KV 状态机 |
+| 月份 | 主题 | 核心产出 | 配套代码 |
+| --- | --- | --- | --- |
+| Month 01 | 内存管理实战 | 内存池库 + 手写智能指针 | [memory_pool](../CPP-Practice/memory_pool)、[month1_benchmark](../CPP-Practice/month1_benchmark)、[raii](../CPP-Practice/raii) |
+| Month 02 | 并发编程实战 | 线程池库 + SPSC 无锁队列 | [thread_pool](../CPP-Practice/thread_pool)、[lock_free](../CPP-Practice/lock_free) |
+| Month 03 | 模板与泛型深入 | 手写 tuple / variant / type_list | [template_traits](../CPP-Practice/template_traits)、[variadic_tuple](../CPP-Practice/variadic_tuple)、[type_erasure](../CPP-Practice/type_erasure)、[advanced_templates](../CPP-Practice/advanced_templates) |
+| Month 04 | 自编 STL（序列容器） | MyVector / MyDeque / MyList + 迭代器体系 | [stl_sequence](../CPP-Practice/stl_sequence) |
+| Month 05 | 自编 STL（关联容器） | 红黑树 + set/map + unordered_map + 算法 | [stl_associative](../CPP-Practice/stl_associative) |
+| Month 06 | 异步日志系统 | 双缓冲异步日志 + 多 Sink + PoolAllocator 接入 | [async_logger](../CPP-Practice/async_logger) |
+| Month 07 | LevelDB 源码精读 | SkipList + Arena + SSTable + Compaction 仿写 | [leveldb_mini](../CPP-Practice/leveldb_mini) |
+| Month 08 | 网络编程 | Reactor 框架 + HTTP Server | [network_reactor](../CPP-Practice/network_reactor) |
+| Month 09 | 高性能网络库 | io_uring + 定时器轮 + 连接池 | [high_perf_net](../CPP-Practice/high_perf_net) |
+| Month 10 | 协程库 | C++20 coroutine + 调度器 + Channel | [coroutine_lib](../CPP-Practice/coroutine_lib) |
+| Month 11 | RPC 框架 | protobuf-like 编码 + 帧协议 + 服务发现 | [rpc_framework](../CPP-Practice/rpc_framework) |
+| Month 12 | Mini Raft KV | Leader 选举 + 日志复制 + KV 状态机 | [raft_kv](../CPP-Practice/raft_kv) |
 
 ## 快速导航
 
@@ -46,3 +46,4 @@
 
 - 根目录 [README.md](../README.md) 是整个仓库的入口。
 - [CPP-Practice/README.md](../CPP-Practice/README.md) 放和这条主线配套的练习代码。
+- 涉及真实外部依赖或压测指标的阶段，会在对应 README 中区分“本机教学模拟/Proxy 验收”和“真实 benchmark 未执行”。

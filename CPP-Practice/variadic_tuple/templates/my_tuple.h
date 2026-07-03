@@ -1,4 +1,4 @@
-#pragma once  // 防止该模板头文件在同一编译单元中被重复包含。
+#pragma once  // 防止该模板头文件在同一编译单元中被重复包含，保证模板只声明一次。
 
 #include <cstddef>  // 使用 std::size_t 表示编译期索引和元素数量。
 #include <ostream>  // 使用 std::ostream 实现 Tuple 的打印函数。

@@ -12,6 +12,10 @@ Month 08（Week 29-32）对应的网络编程与 Reactor 教学工程放在这�
 - `HttpParser` / `HttpServerCore`：HTTP GET 解析和响应
 - `RpcServerCore` / `RpcClientCore`：长度字段帧上的同进程 RPC 往返
 
+## 验收口径
+
+当前 demo 运行在 Windows/MSVC 环境下，主要验证跨平台核心抽象、协议拆包和同进程请求往返。真实 epoll、wrk 压测、ASan 检查和网络延迟 benchmark 需要 Linux/WSL2 环境，当前 README 不把本机模拟结果标记为真实网络性能指标。
+
 ## 构建
 
 ```powershell

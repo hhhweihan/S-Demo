@@ -1,4 +1,4 @@
-#pragma once  // 防止 Function 头文件在同一编译单元中被重复包含。
+#pragma once  // 防止 Function 头文件在同一编译单元中被重复包含，避免重复定义。
 
 #include <functional>  // 使用 std::invoke 和 std::bad_function_call。
 #include <memory>  // 使用 std::unique_ptr 管理擦除后的多态对象。

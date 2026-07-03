@@ -9,7 +9,7 @@ class FileGuard {  // FileGuard 用 RAII 封装 FILE* 的打开、关闭和所�
   FILE* file_ = nullptr;  // 保存当前拥有的 C 文件句柄，nullptr 表示没有资源。
   std::string path_;  // 保存文件路径，便于错误信息和示例输出使用。
 
-  void close_current() noexcept {  // 关闭当前持有的文件句柄，供析构和移动赋值复用。
+  void close_current() noexcept {  // 关闭当前持有的文件句柄，供析构函数和移动赋值复用。
     if (file_ != nullptr) {  // 只有确实持有文件时才调用 fclose。
       std::fclose(file_);  // 释放底层 C 文件资源。
       file_ = nullptr;  // 清空指针，避免悬空指针和重复关闭。

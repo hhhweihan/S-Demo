@@ -1,4 +1,4 @@
-#pragma once  // 防止 Optional 头文件在同一编译单元中被重复包含。
+#pragma once  // 防止 Optional 头文件在同一编译单元中被重复包含，避免重复定义。
 
 #include <new>  // 使用 placement new 在原始存储上构造对象。
 #include <optional>  // 使用 std::bad_optional_access 作为空值访问异常。

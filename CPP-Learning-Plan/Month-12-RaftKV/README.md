@@ -3,11 +3,11 @@
 ## 月度目标
 
 基于你已有的 Raft 笔记，从零实现一个 3 节点 Raft 集群，上层提供 KV 存储接口。
-这是整个 6 个月学习的最终产出，也是最有含金量的项目。
+这是十二个月进阶计划的最终项目，也是最有含金量的综合产出。
 
 ## 系统架构
 
-```
+```text
 客户端
     │ Put/Get/Delete（HTTP 或自定义协议）
     ▼
@@ -21,7 +21,7 @@ RaftNode（3 个节点）
 
 ## Raft 核心协议回顾
 
-```
+```text
 角色迁移：
 Follower ─[超时]→ Candidate ─[赢得多数票]→ Leader
          ←[收到心跳]──────────────────────
@@ -39,7 +39,7 @@ Leader 职责：
 ## 周计划
 
 | 周 | 主题 | 文件 |
-|----|------|------|
+| --- | --- | --- |
 | Week 45 | Leader 选举 | [Week-45-LeaderElection](./Week-45-LeaderElection/) |
 | Week 46 | 日志复制 | [Week-46-LogReplication](./Week-46-LogReplication/) |
 | Week 47 | KV 状态机 + 持久化 | [Week-47-KVStateMachine](./Week-47-KVStateMachine/) |

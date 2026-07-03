@@ -10,7 +10,7 @@
 template<typename F>  // F 表示离开作用域时需要执行的可调用对象类型。
 class ScopeGuard {  // ScopeGuard 用 RAII 管理一段退出作用域时自动运行的清理逻辑。
   F func_;  // 保存用户传入的清理函数、lambda 或函数对象。
-  bool dismissed_ = false;  // 标记守卫是否已取消，默认处于激活状态。
+  bool dismissed_ = false;  // 标记守卫是否已经取消，默认处于激活状态。
 
 public:  // 对外暴露构造、移动、析构和状态控制接口。
   explicit ScopeGuard(F&& func) noexcept(std::is_nothrow_move_constructible_v<F>)  // 接收右值可调用对象，并按 F 的移动构造 noexcept 性质声明异常规格。

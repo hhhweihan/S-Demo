@@ -1,4 +1,4 @@
-#pragma once  // 防止 Variant 头文件在同一编译单元中被重复包含。
+#pragma once  // 防止 Variant 头文件在同一编译单元中被重复包含，避免重复定义。
 
 #include <cstddef>  // 使用 std::size_t 表示类型下标。
 #include <new>  // 使用 placement new 在原始存储中构造对象。

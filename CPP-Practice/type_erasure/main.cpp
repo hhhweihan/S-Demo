@@ -1,4 +1,4 @@
-#include <cstdlib>  // 使用 std::exit 在测试失败时终止程序。
+#include <cstdlib>  // 使用 std::exit 在测试失败时终止程序，保持示例失败时立即停下。
 #include <iostream>  // 使用 std::cout/std::cerr 输出示例结果。
 #include <map>  // 使用 std::map 保存命令名到处理函数的映射。
 #include <optional>  // 使用 std::bad_optional_access 验证 Optional 空值访问异常。

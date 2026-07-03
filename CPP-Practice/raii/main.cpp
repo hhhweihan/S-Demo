@@ -22,7 +22,7 @@ void test_defer_macro() {  // 验证 DEFER 宏能在离开局部作用域时自�
     std::cout << "registered deferred close\n";  // 提示延迟关闭已经注册。
   }  // 离开内部作用域，ScopeGuard 析构并调用 fclose。
 
-  std::cout << "[defer] file closed via guard\n";  // 打印文件已由守卫关闭的结果信息。
+  std::cout << "[defer] file closed via guard\n";  // 打印文件已通过守卫关闭的结果信息。
 }  // DEFER 宏测试结束。
 
 void test_file_guard_success_and_move() {  // 验证 FileGuard 成功打开文件并支持移动构造。
