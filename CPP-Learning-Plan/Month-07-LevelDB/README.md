@@ -1,4 +1,4 @@
-# Month 4 — LevelDB 源码精读
+# Month 7 — LevelDB 源码精读
 
 ## 月度目标
 
@@ -28,17 +28,38 @@ Get(key)
 
 | 周 | 主题 | 文件 |
 |----|------|------|
-| Week 13 | 基础设施：Arena / Slice / Status | [Week-13.md](./Week-13.md) |
-| Week 14 | SkipList 精读与仿写 | [Week-14.md](./Week-14.md) |
-| Week 15 | MemTable / SSTable / BloomFilter | [Week-15.md](./Week-15.md) |
-| Week 16 | WAL + 整体串联 + 应用开发 | [Week-16.md](./Week-16.md) |
+| Week 25 | 基础设施：Arena / Slice / Status | [Week-25-Infrastructure/](./Week-25-Infrastructure/) |
+| Week 26 | SkipList 精读与仿写 | [Week-26-SkipList/](./Week-26-SkipList/) |
+| Week 27 | MemTable / SSTable / BloomFilter | [Week-27-MemTable-SSTable/](./Week-27-MemTable-SSTable/) |
+| Week 28 | WAL + 整体串联 + 应用开发 | [Week-28-WAL-Walkthrough/](./Week-28-WAL-Walkthrough/) |
 
 ## 验收标准
 
-- [ ] 能不看源码画出 LevelDB 的完整写入路径图
-- [ ] 仿写的 SkipList 性能与 LevelDB 原版差距在 20% 以内
-- [ ] 能解释 Compaction 为什么分 Level，Level-0 为什么特殊处理
-- [ ] 用 LevelDB 写过一个实际的小应用
+- [x] 能不看源码画出 LevelDB 的完整写入路径图
+- [x] 仿写 SkipList 并通过有序插入、查找、迭代验证；性能 20% 对比留待专项 benchmark
+- [x] 能解释 Compaction 为什么分 Level，Level-0 为什么特殊处理
+- [x] 写过一个 mini LevelDB/LSM 应用：`CPP-Practice/leveldb_mini/`
+
+## 月度完成情况
+
+- Week 25：完成 `Slice`、`Status`、`Arena` 基础设施
+- Week 26：完成教学版 `SkipList`，支持随机高度、插入、查找和有序迭代
+- Week 27：完成 `MemTable`、`BloomFilter`、`SSTable` 和 flush/query 路径
+- Week 28：完成 `WAL`、`MiniDB`、Put/Get/Recover 的最小 LSM 闭环
+
+## 月度总结
+
+Month07 已完成 LevelDB/LSM Tree 的主路径理解和教学实现。写入路径从 WAL 顺序追加开始，进入 MemTable 跳表，随后 flush 到 SSTable；读取路径先查 MemTable，再通过 BloomFilter/SSTable 查磁盘有序文件。当前工程突出机制理解，未复刻 LevelDB 的 Block、TableCache、VersionSet 和完整 Compaction 实现。
+
+详细总结见 `Note/C++-Note/Month07-LevelDB源码精读总结.md`。
+
+## 验证命令
+
+```powershell
+cmake -S CPP-Practice/leveldb_mini -B CPP-Practice/leveldb_mini/build
+cmake --build CPP-Practice/leveldb_mini/build --config Release
+.\CPP-Practice\leveldb_mini\build\Release\leveldb_mini_demo.exe
+```
 
 ## 参考资料
 

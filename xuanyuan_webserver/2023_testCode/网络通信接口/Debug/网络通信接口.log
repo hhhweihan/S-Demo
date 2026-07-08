@@ -1,0 +1,6 @@
+﻿  CSckImp1.c
+E:\VS\网络通信接口\CSckImp1.c(16,8): warning C4013: “memset”未定义；假设外部返回 int
+E:\VS\网络通信接口\CSckImp1.c(31,8): warning C4013: “strcpy”未定义；假设外部返回 int
+E:\VS\网络通信接口\CSckImp1.c(49,9): warning C4013: “strncpy”未定义；假设外部返回 int
+MSVCRTD.lib(exe_main.obj) : error LNK2019: 无法解析的外部符号 _main，函数 "int __cdecl invoke_main(void)" (?invoke_main@@YAHXZ) 中引用了该符号
+E:\VS\Project1\Debug\网络通信接口.exe : fatal error LNK1120: 1 个无法解析的外部命令

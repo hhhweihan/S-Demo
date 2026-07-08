@@ -1,0 +1,3 @@
+/home/weihan/Code2023/CMakeFiles/rebuild_cache.dir
+/home/weihan/Code2023/CMakeFiles/Helloworld.dir
+/home/weihan/Code2023/CMakeFiles/edit_cache.dir

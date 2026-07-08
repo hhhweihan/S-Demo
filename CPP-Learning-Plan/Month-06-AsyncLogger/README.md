@@ -38,7 +38,31 @@
 
 ## 验收标准
 
-- [ ] 多线程 100 万条日志，异步日志吞吐量 > 同步日志 5 倍以上
-- [ ] 日志文件按天自动滚动，历史文件自动压缩
-- [ ] 与 spdlog 性能差距 < 2 倍
-- [ ] 日志库对业务线程的平均延迟 < 1μs
+- [x] 多线程异步写入正确性验证通过：4 线程共 8000 条日志无丢失
+- [x] FileSink 按日期命名日志文件，ConsoleSink 同步收到相同日志
+- [x] 完成 enqueue latency smoke test：本机约 2.548 μs/message
+- [ ] 多线程 100 万条日志，异步日志吞吐量 > 同步日志 5 倍以上（待专项 benchmark）
+- [ ] 历史文件自动压缩（未实现，后续作为运维策略补充）
+- [ ] 与 spdlog / glog 性能差距 < 2 倍（未接入第三方依赖）
+- [ ] 日志库对业务线程的平均延迟 < 1μs（当前 smoke test 未达到）
+
+## 月度完成情况
+
+- Week 21：完成同步 logger、日志级别、格式化和流式接口
+- Week 22：完成异步 logger、前台缓冲、后台线程、批量 flush 和关闭流程
+- Week 23：完成 Sink 抽象、MemorySink、ConsoleSink、FileSink
+- Week 24：完成多线程无丢失验证、多 sink 验证和 enqueue latency smoke test
+
+## 月度总结
+
+Month06 已完成异步日志系统的主体闭环：前端以流式接口生成日志，logger 负责同步或异步派发，sink 负责具体输出。当前工程重点是结构正确性和可复用性；百万级吞吐、第三方对比、历史压缩和微秒级延迟属于后续性能工程任务。
+
+详细总结见 `Note/C++-Note/Month06-异步日志系统实战总结.md`。
+
+## 验证命令
+
+```powershell
+cmake -S CPP-Practice/async_logger -B CPP-Practice/async_logger/build
+cmake --build CPP-Practice/async_logger/build --config Release
+.\CPP-Practice\async_logger\build\Release\async_logger_demo.exe
+```

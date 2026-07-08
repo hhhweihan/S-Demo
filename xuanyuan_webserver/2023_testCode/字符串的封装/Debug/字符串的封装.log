@@ -1,0 +1,6 @@
+﻿  MyString.cpp
+  字符串类的封装.cpp
+  正在生成代码...
+E:\VS\字符串的封装\MyString.cpp(88): warning C4172: 返回局部变量或临时变量的地址: newStr
+E:\VS\字符串的封装\MyString.cpp(104): warning C4172: 返回局部变量或临时变量的地址: newStr
+  字符串的封装.vcxproj -> E:\VS\Project1\Debug\字符串的封装.exe
