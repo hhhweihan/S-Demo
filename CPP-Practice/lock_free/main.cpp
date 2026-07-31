@@ -1,8 +1,8 @@
 #include "concurrent/aba_demo.h"
 #include "concurrent/blocking_queue.h"
-#include "concurrent/bounded_queue.h"
 #include "concurrent/lock_free_stack.h"
 #include "concurrent/memory_order_experiments.h"
+#include "concurrent/mpmc_queue.h"
 #include "concurrent/spsc_queue.h"
 
 #include <atomic>
@@ -312,21 +312,26 @@ BenchmarkResult run_blocking_queue_benchmark() {
                            kExchangeCount / (elapsed_ms / 1000.0)};
 }
 
-BenchmarkResult run_bounded_queue_benchmark() {
-    BoundedQueue<int> queue(1024);
+BenchmarkResult run_mpmc_queue_benchmark() {
+    MPMCQueue<int> queue(1024);
     std::atomic<bool> order_ok{true};
 
     const double elapsed_ms = measure_ms([&] {
         std::thread producer([&] {
             for (int value = 0; value < kExchangeCount; ++value) {
-                queue.push(value);
+                while (!queue.push(value)) {
+                    std::this_thread::yield();  // 满则退让重试；MPMCQueue 无阻塞语义
+                }
             }
         });
 
         std::thread consumer([&] {
             for (int expected = 0; expected < kExchangeCount; ++expected) {
-                const int actual = queue.pop();
-                if (actual != expected) {
+                int actual = -1;
+                while (!queue.pop(actual)) {
+                    std::this_thread::yield();
+                }
+                if (actual != expected) {  // 单生产者下 Vyukov 队列保持 FIFO
                     order_ok.store(false, std::memory_order_relaxed);
                 }
             }
@@ -337,7 +342,8 @@ BenchmarkResult run_bounded_queue_benchmark() {
     });
 
     EXPECT_TRUE(order_ok.load(std::memory_order_relaxed));
-    return BenchmarkResult{"BoundedQueue_1P1C_cap1024", elapsed_ms,
+    EXPECT_TRUE(queue.empty());
+    return BenchmarkResult{"MPMCQueue_1P1C_cap1024", elapsed_ms,
                            kExchangeCount / (elapsed_ms / 1000.0)};
 }
 
@@ -564,7 +570,7 @@ int main() {
 
         const BenchmarkResult baseline = run_std_queue_baseline();
         const BenchmarkResult blocking = run_blocking_queue_benchmark();
-        const BenchmarkResult bounded = run_bounded_queue_benchmark();
+        const BenchmarkResult mpmc = run_mpmc_queue_benchmark();
         const BenchmarkResult spsc = run_spsc_benchmark();
         const BenchmarkResult lock_free_stack_push_drain =
             run_lock_free_stack_push_drain_benchmark();
@@ -590,7 +596,7 @@ int main() {
         std::cout << "Day 47 / Day 49 benchmark (" << kExchangeCount << " int handoffs, 1P1C)\n";
         print_benchmark(baseline);
         print_benchmark(blocking);
-        print_benchmark(bounded);
+        print_benchmark(mpmc);
         print_benchmark(spsc);
         return 0;
     } catch (const std::exception& ex) {

@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include "hazard_pointer.h"
+
 // 最简"内存安全"的无锁栈：push/pop 用 CAS 维护栈顶。pop 出来的节点不立即 delete，而是塞进
 // retired_ 延迟到析构统一释放——这样任何还持有旧指针的并发读者都不可能解引用到已释放内存。
 //
@@ -305,4 +307,76 @@ class TaggedPointerStack {
     std::atomic<Head> head_{};
     std::mutex retired_mutex_;
     std::vector<Node*> retired_;  // 延迟释放列表：无界增长，仅析构时清空
+};
+
+// 用 hazard pointer 做**有界回收**的无锁栈——这才是上面三个教学栈"死后统一释放"简化的生产级答案。
+// pop 前先把 old_head 登记到 hazard 槽（发布+校验），解引用完再 retire；回收方 delete 前扫描槽位，
+// 只回收"当前无人登记"的节点。于是 retired 列表长度被 HazardPointerDomain 的扫描阈值卡住，运行期
+// 内存有界——对照 LockFreeStack 的 retired_ 无界增长。正确性关键：hazard pointer 的 load-verify
+// 协议要求"reader 发布 hp"与"reclaimer 摘除该节点"这两个操作落在同一个 seq_cst 全序里，否则弱序机
+// 上二者可能互相看不见对方（ARM 上用 acq_rel 摘链在 TSan 下会暴露 use-after-free）。因此这里对
+// head_ 的两处 CAS 都用 seq_cst，与 protect() 内部的 seq_cst 发布/校验配对，经典实现（如
+// 《C++ Concurrency in Action》的 hazard pointer 栈）同样对这组操作全用默认的 seq_cst。
+template <typename T>
+class HazardStack {
+ public:
+    HazardStack() = default;
+
+    // 析构前无并发访问：先摘净存活链，再让 domain 清空全局 retired（此刻无人登记，全部可删）。
+    ~HazardStack() {
+        Node* current = head_.exchange(nullptr, std::memory_order_seq_cst);
+        while (current != nullptr) {
+            Node* next = current->next;
+            delete current;
+            current = next;
+        }
+        lockfree::HazardPointerDomain::instance().reclaim_all();
+    }
+
+    HazardStack(const HazardStack&) = delete;
+    HazardStack& operator=(const HazardStack&) = delete;
+
+    void push(T value) {
+        Node* new_node = new Node(std::move(value));
+        new_node->next = head_.load(std::memory_order_seq_cst);
+        while (!head_.compare_exchange_weak(new_node->next, new_node, std::memory_order_seq_cst,
+                                            std::memory_order_seq_cst)) {
+        }
+    }
+
+    bool pop(T& out) {
+        auto& domain = lockfree::HazardPointerDomain::instance();
+        Node* old_head;
+        for (;;) {
+            // protect 内部 load-verify：返回时 old_head 已被本线程 hazard 槽护住，不会被并发回收。
+            old_head = domain.protect(head_);
+            if (old_head == nullptr) {
+                domain.clear();
+                return false;
+            }
+            Node* next = old_head->next;  // 安全解引用：old_head 受保护
+            // seq_cst：与 protect() 的发布/校验落在同一全序，否则本次摘除可能被弱序机重排到
+            // reader 发布 hp 之前，让 scan() 误判"无人保护"而回收仍被引用的节点。
+            if (head_.compare_exchange_weak(old_head, next, std::memory_order_seq_cst,
+                                            std::memory_order_seq_cst)) {
+                break;  // 摘下成功
+            }
+            // CAS 失败说明栈顶已变，循环回去对新栈顶重新 protect。
+        }
+        out = old_head->value;  // 仍在保护期内，读取安全
+        domain.clear();         // 先撤保护，再 retire——否则会永远护着自己刚退役的节点
+        domain.retire(old_head);
+        return true;
+    }
+
+    bool empty() const { return head_.load(std::memory_order_acquire) == nullptr; }
+
+ private:
+    struct Node {
+        explicit Node(T value) : value(std::move(value)), next(nullptr) {}
+        T value;
+        Node* next;
+    };
+
+    std::atomic<Node*> head_{nullptr};
 };

@@ -6,9 +6,11 @@ add_executable(thread_pool_demo
     main.cpp
     concurrent/joining_thread.h
     concurrent/blocking_queue.h
+    concurrent/bounded_queue.h
     concurrent/countdown_latch.h
     concurrent/rw_mutex.h
     concurrent/thread_pool.h
+    concurrent/work_stealing_deque.h
 )
 
 target_compile_features(thread_pool_demo PRIVATE cxx_std_17)

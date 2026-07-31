@@ -2,7 +2,19 @@ cmake_minimum_required(VERSION 3.16)
 
 project(leveldb_mini_demo LANGUAGES CXX)
 
-add_executable(leveldb_mini_demo main.cpp)
+# lsm/*.h 为 header-only 部件，列入源码表仅为 IDE 可见（编译单元只有 main.cpp）。
+set(LEVELDB_MINI_HEADERS
+    mini_leveldb.h
+    lsm/coding.h
+    lsm/crc32c.h
+    lsm/skiplist.h
+    lsm/record_log.h
+    lsm/block.h
+    lsm/table.h
+    lsm/memtable.h
+    lsm/version.h)
+
+add_executable(leveldb_mini_demo main.cpp ${LEVELDB_MINI_HEADERS})
 target_compile_features(leveldb_mini_demo PRIVATE cxx_std_17)
 target_include_directories(leveldb_mini_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 

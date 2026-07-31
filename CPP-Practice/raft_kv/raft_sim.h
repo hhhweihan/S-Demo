@@ -12,11 +12,25 @@
 // scenario is exactly reproducible from (seed, operations) — the property tests rely on
 // that. Safety invariants are checked after every step so a violation aborts at the seed
 // that caused it, not several rounds later.
+//
+// Productionization on top of the core simulation:
+//   - Persistence via Storage (raft_storage.h): currentTerm/votedFor/log/snapshot are written
+//     through a node's Storage on every change. crash() drops ALL volatile state; restart()
+//     rebuilds the node purely from Storage::load() — no magic retention — so a bug that
+//     forgets to persist something is exposed as lost state after restart.
+//   - Snapshot + log compaction: a node snapshots its applied prefix and truncates the log;
+//     lastIncludedIndex/lastIncludedTerm make all indexing snapshot-aware. A leader whose log
+//     no longer covers a follower's nextIndex ships an InstallSnapshot instead of AppendEntries.
+//   - ReadIndex: a linearizable read confirms leadership with a heartbeat round before serving,
+//     so a stale (partitioned) leader cannot answer with old data — it returns "unavailable".
+//   - Pre-Vote: a candidate first runs a term-less pre-election; only a pre-vote majority lets
+//     it bump its term. A partitioned node rejoining cannot disturb a healthy leader.
 
 #include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <random>
 #include <set>
@@ -26,20 +40,13 @@
 #include <variant>
 #include <vector>
 
+#include "raft_storage.h"
+
 namespace raft_sim {
 
 enum class Role { Follower, Candidate, Leader };
 
-struct LogEntry {
-    int term = 0;
-    std::string op;  // "put" | "delete" | "noop"
-    std::string key;
-    std::string value;
-
-    bool operator==(const LogEntry& other) const {
-        return term == other.term && op == other.op && key == other.key && value == other.value;
-    }
-};
+// LogEntry lives in raft_storage.h (shared with the persistence layer).
 
 // --- KV state machine -------------------------------------------------------
 
@@ -58,6 +65,31 @@ class KVStore {
         return it->second;
     }
     const std::map<std::string, std::string>& data() const { return data_; }
+    void restore(std::map<std::string, std::string> data) { data_ = std::move(data); }
+
+    // Deterministic snapshot (map iteration is ordered): serialize for Storage / InstallSnapshot.
+    std::string serialize() const {
+        std::string out;
+        detail::PutU32(&out, static_cast<std::uint32_t>(data_.size()));
+        for (const auto& [k, v] : data_) {
+            detail::PutStr(&out, k);
+            detail::PutStr(&out, v);
+        }
+        return out;
+    }
+    static std::map<std::string, std::string> deserialize(const std::string& bytes) {
+        std::map<std::string, std::string> data;
+        std::size_t pos = 0;
+        std::uint32_t count = 0;
+        if (!detail::GetU32(bytes, &pos, &count)) return data;
+        for (std::uint32_t i = 0; i < count; ++i) {
+            std::string k, v;
+            if (!detail::GetStr(bytes, &pos, &k)) break;
+            if (!detail::GetStr(bytes, &pos, &v)) break;
+            data.emplace(std::move(k), std::move(v));
+        }
+        return data;
+    }
 
  private:
     std::map<std::string, std::string> data_;
@@ -70,10 +102,12 @@ struct RequestVoteArgs {
     int candidateId;
     int lastLogIndex;
     int lastLogTerm;
+    bool preVote = false;  // true: term-less pre-election probe (does not bind the voter)
 };
 struct RequestVoteReply {
     int term;
     bool voteGranted;
+    bool preVote = false;
 };
 struct AppendEntriesArgs {
     int term;
@@ -82,17 +116,32 @@ struct AppendEntriesArgs {
     int prevLogTerm;
     int leaderCommit;
     std::vector<LogEntry> entries;
+    int readId = 0;  // non-zero: this heartbeat also confirms leadership for a ReadIndex round
 };
 struct AppendEntriesReply {
     int term;
     bool success;
     int matchIndex;  // on success: last index the follower now agrees on
+    int readId = 0;  // echoes the args.readId it confirms
+};
+struct InstallSnapshotArgs {
+    int term;
+    int leaderId;
+    int lastIncludedIndex;
+    int lastIncludedTerm;
+    std::string data;  // serialized state machine
+};
+struct InstallSnapshotReply {
+    int term;
+    int matchIndex;  // follower's lastIncludedIndex after install
 };
 
 struct Message {
     int from;
     int to;
-    std::variant<RequestVoteArgs, RequestVoteReply, AppendEntriesArgs, AppendEntriesReply> body;
+    std::variant<RequestVoteArgs, RequestVoteReply, AppendEntriesArgs, AppendEntriesReply,
+                 InstallSnapshotArgs, InstallSnapshotReply>
+        body;
     std::int64_t deliverAt;
     std::int64_t seq;  // stable tiebreak so ordering is deterministic
 };
@@ -100,30 +149,48 @@ struct Message {
 // --- per-node state ---------------------------------------------------------
 
 struct Node {
-    explicit Node(int node_id) : id(node_id) {}
+    explicit Node(int node_id, std::shared_ptr<Storage> stg)
+        : id(node_id), storage(std::move(stg)) {}
 
     int id;
+    std::shared_ptr<Storage> storage;
+
+    // ---- volatile state (lost on crash) ----
     bool alive = true;
     Role role = Role::Follower;
-    int currentTerm = 0;
-    int votedFor = -1;
-    std::vector<LogEntry> log;  // 0-based; termAt(-1) == 0 by convention
     int commitIndex = -1;
     int lastApplied = -1;
     KVStore store;
-
-    // leader-only bookkeeping
-    std::vector<int> nextIndex;
-    std::vector<int> matchIndex;
+    std::vector<int> nextIndex;   // leader-only
+    std::vector<int> matchIndex;  // leader-only
     int votesGranted = 0;
+    int preVotesGranted = 0;
+    std::int64_t electionDeadline = 0;
+    std::int64_t heartbeatDeadline = 0;
+    std::int64_t lastLeaderContact = 0;  // last valid AppendEntries/InstallSnapshot time
 
-    std::int64_t electionDeadline = 0;   // followers/candidates
-    std::int64_t heartbeatDeadline = 0;  // leaders
+    // ReadIndex bookkeeping (leader-only, volatile)
+    int currentReadId = 0;
+    std::vector<char> readAckedBy;  // distinct peers that acked the current read round
+    int readIndexValue = -1;
+    bool readConfirmed = false;
 
-    int lastLogIndex() const { return static_cast<int>(log.size()) - 1; }
+    // ---- persistent state (mirrored to storage) ----
+    int currentTerm = 0;
+    int votedFor = -1;
+    std::vector<LogEntry> log;   // entries at logical indices [firstIndex()..lastLogIndex()]
+    int lastIncludedIndex = -1;  // snapshot boundary; -1 = no snapshot
+    int lastIncludedTerm = 0;
+
+    // ---- snapshot-aware indexing ----
+    int firstIndex() const { return lastIncludedIndex + 1; }  // first index held in `log`
+    int lastLogIndex() const { return lastIncludedIndex + static_cast<int>(log.size()); }
+    bool hasEntry(int index) const { return index >= firstIndex() && index <= lastLogIndex(); }
+    const LogEntry& entryAt(int index) const { return log[index - firstIndex()]; }
     int termAt(int index) const {
-        if (index < 0 || index >= static_cast<int>(log.size())) return 0;
-        return log[index].term;
+        if (index == lastIncludedIndex) return lastIncludedTerm;
+        if (index < firstIndex() || index > lastLogIndex()) return 0;
+        return log[index - firstIndex()].term;
     }
 };
 
@@ -135,36 +202,45 @@ struct Config {
     std::int64_t heartbeat = 15;
     std::int64_t delayMin = 2;
     std::int64_t delayMax = 8;
-    double dropRate = 0.0;  // per-message, on top of partitions
-    double dupRate = 0.0;   // chance a delivered message is duplicated
+    double dropRate = 0.0;      // per-message, on top of partitions
+    double dupRate = 0.0;       // chance a delivered message is duplicated
+    int snapshotThreshold = 0;  // applied entries beyond snapshot before compacting (0 = off)
+    bool preVote = false;       // run a pre-election before bumping term
 };
+
+// Factory so each node gets its own Storage (e.g. a per-node file). Null ⇒ MemStorage.
+using StorageFactory = std::function<std::shared_ptr<Storage>(int nodeId)>;
 
 // --- the cluster / simulation driver ---------------------------------------
 
 class Cluster {
  public:
-    Cluster(int count, std::uint64_t seed, Config cfg = {}) : n_(count), cfg_(cfg), rng_(seed) {
+    Cluster(int count, std::uint64_t seed, Config cfg = {}, StorageFactory factory = nullptr)
+        : n_(count), cfg_(cfg), rng_(seed), factory_(std::move(factory)) {
         reachable_.assign(n_, std::vector<char>(n_, 1));
-        for (int i = 0; i < n_; ++i) nodes_.emplace_back(i);
-        for (auto& node : nodes_) resetElectionTimer(node);
+        for (int i = 0; i < n_; ++i) nodes_.emplace_back(i, makeStorage(i));
+        for (auto& node : nodes_) {
+            // A node may already have durable state (e.g. FileStorage pointed at a populated
+            // dir); load it so a "fresh" Cluster over existing files behaves like a reboot.
+            loadFromStorage(node);
+            resetElectionTimer(node);
+        }
     }
 
     // ---- fault injection knobs (all deterministic given the seed) ----
     void crash(int id) {
+        // Lose ALL volatile state. Only what reached Storage survives; restart() proves it.
         Node& node = nodes_.at(id);
+        std::shared_ptr<Storage> stg = node.storage;
+        node = Node(id, stg);
         node.alive = false;
-        node.role = Role::Follower;
     }
     void restart(int id) {
-        // Volatile state is lost on restart; persistent state (currentTerm, votedFor, log)
-        // survives — that is exactly what Raft assumes stable storage guarantees.
         Node& node = nodes_.at(id);
+        std::shared_ptr<Storage> stg = node.storage;
+        node = Node(id, stg);  // volatile state starts empty
         node.alive = true;
-        node.role = Role::Follower;
-        node.commitIndex = -1;
-        node.lastApplied = -1;
-        node.store = KVStore{};
-        replayCommittedAfterRestart(node);
+        loadFromStorage(node);  // rebuild persistent state + state machine from disk
         resetElectionTimer(node);
     }
     void partition(const std::vector<int>& groupA, const std::vector<int>& groupB) {
@@ -187,7 +263,40 @@ class Cluster {
         Node& node = nodes_[leader];
         node.log.push_back(LogEntry{node.currentTerm, op, key, value});
         node.matchIndex[leader] = node.lastLogIndex();
+        persistLog(node);
         return node.lastLogIndex();
+    }
+
+    // ---- linearizable read (ReadIndex) ----
+    // Start a read round on the presumed leader: snapshot commitIndex and fire a heartbeat that
+    // a majority must ack (proving no newer leader exists). Returns the readIndex, or -1.
+    int requestRead(int leaderId) {
+        if (leaderId < 0) return -1;
+        Node& l = nodes_.at(leaderId);
+        if (!l.alive || l.role != Role::Leader) return -1;
+        ++l.currentReadId;
+        l.readIndexValue = l.commitIndex;
+        l.readAckedBy.assign(n_, 0);
+        l.readAckedBy[l.id] = 1;  // counts self
+        l.readConfirmed = (majority() == 1);
+        broadcastAppendEntries(l);  // stamps currentReadId into the heartbeats
+        return l.readIndexValue;
+    }
+    // The read may be served once leadership is confirmed AND the state machine has caught up to
+    // the readIndex. A leader that lost quorum never confirms → the read stays unavailable.
+    bool readReady(int leaderId, int readIndex) const {
+        if (leaderId < 0) return false;
+        const Node& l = nodes_.at(leaderId);
+        return l.alive && l.role == Role::Leader && l.readConfirmed && l.lastApplied >= readIndex;
+    }
+    // Convenience: run a ReadIndex round to completion and return the value, or nullopt if the
+    // node could not confirm leadership within the budget (stale/partitioned leader).
+    std::optional<std::string> linearizableGet(int leaderId, const std::string& key,
+                                               std::int64_t maxMs) {
+        int readIndex = requestRead(leaderId);
+        if (readIndex < 0) return std::nullopt;
+        if (!runUntil([&] { return readReady(leaderId, readIndex); }, maxMs)) return std::nullopt;
+        return nodes_.at(leaderId).store.get(key);
     }
 
     // ---- observation ----
@@ -225,8 +334,30 @@ class Cluster {
     }
 
  private:
-    // Advance virtual time to the next scheduled event (timer or message), no later than
-    // `cap`, process everything due at that instant, then re-check safety invariants.
+    std::shared_ptr<Storage> makeStorage(int id) {
+        return factory_ ? factory_(id) : std::make_shared<MemStorage>();
+    }
+
+    // ---- persistence helpers ----
+    void persistHardState(Node& node) {
+        node.storage->saveHardState(node.currentTerm, node.votedFor);
+    }
+    void persistLog(Node& node) { node.storage->saveLog(node.log); }
+    void loadFromStorage(Node& node) {
+        PersistentState ps = node.storage->load();
+        node.currentTerm = ps.currentTerm;
+        node.votedFor = ps.votedFor;
+        node.lastIncludedIndex = ps.lastIncludedIndex;
+        node.lastIncludedTerm = ps.lastIncludedTerm;
+        node.log = ps.log;
+        // Snapshot is applied state by definition; volatile commit/apply resume from its boundary
+        // and are re-advanced by the leader's AppendEntries after rejoining.
+        node.store.restore(KVStore::deserialize(ps.snapshot));
+        node.commitIndex = ps.lastIncludedIndex;
+        node.lastApplied = ps.lastIncludedIndex;
+    }
+
+    // ---- core stepping ----
     void step(std::int64_t cap) {
         std::int64_t next = cap;
         for (const auto& node : nodes_) {
@@ -243,7 +374,7 @@ class Cluster {
             if (node.role == Role::Leader) {
                 if (node.heartbeatDeadline <= now_) broadcastAppendEntries(node);
             } else if (node.electionDeadline <= now_) {
-                startElection(node);
+                onElectionTimeout(node);
             }
         }
 
@@ -267,7 +398,31 @@ class Cluster {
         node.currentTerm = term;
         node.role = Role::Follower;
         node.votedFor = -1;
+        node.readConfirmed = false;
+        persistHardState(node);
         resetElectionTimer(node);
+    }
+
+    // On timeout: with Pre-Vote enabled, first run a term-less probe; otherwise elect directly.
+    void onElectionTimeout(Node& node) {
+        if (cfg_.preVote)
+            startPreVote(node);
+        else
+            startElection(node);
+    }
+
+    // Pre-Vote: ask peers "would you grant a vote in term+1?" WITHOUT bumping our term or vote.
+    // Only a pre-vote majority triggers the real, term-incrementing election. This is what stops
+    // a partitioned node (whose term ran far ahead in isolation) from disrupting a healthy leader
+    // on reconnect: healthy followers still hearing heartbeats reject the pre-vote.
+    void startPreVote(Node& node) {
+        node.role = Role::Candidate;
+        node.preVotesGranted = 1;  // votes for itself, hypothetically
+        resetElectionTimer(node);
+        RequestVoteArgs args{node.currentTerm + 1, node.id, node.lastLogIndex(),
+                             node.termAt(node.lastLogIndex()), /*preVote=*/true};
+        for (int peer = 0; peer < n_; ++peer)
+            if (peer != node.id) send(node.id, peer, args);
     }
 
     void startElection(Node& node) {
@@ -275,9 +430,10 @@ class Cluster {
         ++node.currentTerm;
         node.votedFor = node.id;
         node.votesGranted = 1;
+        persistHardState(node);
         resetElectionTimer(node);
         RequestVoteArgs args{node.currentTerm, node.id, node.lastLogIndex(),
-                             node.termAt(node.lastLogIndex())};
+                             node.termAt(node.lastLogIndex()), /*preVote=*/false};
         for (int peer = 0; peer < n_; ++peer)
             if (peer != node.id) send(node.id, peer, args);
     }
@@ -287,11 +443,13 @@ class Cluster {
         node.nextIndex.assign(n_, node.lastLogIndex() + 1);
         node.matchIndex.assign(n_, -1);
         node.matchIndex[node.id] = node.lastLogIndex();
+        node.readConfirmed = false;
         recordLeader(node.currentTerm, node.id);
         // A fresh leader commits nothing from prior terms until it commits one of its own
         // entries (Raft's no-op / current-term rule); append a no-op to make progress.
         node.log.push_back(LogEntry{node.currentTerm, "noop", "", ""});
         node.matchIndex[node.id] = node.lastLogIndex();
+        persistLog(node);
         node.heartbeatDeadline = now_;  // send immediately
     }
 
@@ -299,6 +457,12 @@ class Cluster {
         leader.heartbeatDeadline = now_ + cfg_.heartbeat;
         for (int peer = 0; peer < n_; ++peer) {
             if (peer == leader.id) continue;
+            // If the follower needs entries we've already compacted into our snapshot, ship the
+            // snapshot instead of AppendEntries.
+            if (leader.nextIndex[peer] <= leader.lastIncludedIndex) {
+                sendInstallSnapshot(leader, peer);
+                continue;
+            }
             int prev = leader.nextIndex[peer] - 1;
             AppendEntriesArgs args;
             args.term = leader.currentTerm;
@@ -307,9 +471,20 @@ class Cluster {
             args.prevLogTerm = leader.termAt(prev);
             args.leaderCommit = leader.commitIndex;
             for (int i = leader.nextIndex[peer]; i <= leader.lastLogIndex(); ++i)
-                args.entries.push_back(leader.log[i]);
+                args.entries.push_back(leader.entryAt(i));
+            args.readId = leader.readConfirmed ? 0 : leader.currentReadId;
             send(leader.id, peer, args);
         }
+    }
+
+    void sendInstallSnapshot(Node& leader, int peer) {
+        InstallSnapshotArgs args;
+        args.term = leader.currentTerm;
+        args.leaderId = leader.id;
+        args.lastIncludedIndex = leader.lastIncludedIndex;
+        args.lastIncludedTerm = leader.lastIncludedTerm;
+        args.data = leader.store.serialize();
+        send(leader.id, peer, args);
     }
 
     void deliver(const Message& msg) {
@@ -319,6 +494,10 @@ class Cluster {
     }
 
     void handle(Node& node, int from, const RequestVoteArgs& args) {
+        if (args.preVote) {
+            handlePreVote(node, from, args);
+            return;
+        }
         if (args.term > node.currentTerm) stepDown(node, args.term);
         bool grant = false;
         if (args.term >= node.currentTerm) {
@@ -328,13 +507,37 @@ class Cluster {
             if ((node.votedFor == -1 || node.votedFor == args.candidateId) && logOk) {
                 grant = true;
                 node.votedFor = args.candidateId;
+                persistHardState(node);
                 resetElectionTimer(node);
             }
         }
-        send(node.id, from, RequestVoteReply{node.currentTerm, grant});
+        send(node.id, from, RequestVoteReply{node.currentTerm, grant, /*preVote=*/false});
+    }
+
+    // Pre-vote grant is advisory: it does NOT bump currentTerm or set votedFor. Grant only if the
+    // candidate's log is at least as up-to-date AND we have not heard from a leader recently (so a
+    // node inside a healthy majority never helps a would-be disruptor cross the pre-vote bar).
+    void handlePreVote(Node& node, int from, const RequestVoteArgs& args) {
+        bool leaderStale = (now_ - node.lastLeaderContact) >= cfg_.electionMin;
+        bool logOk = args.lastLogTerm > node.termAt(node.lastLogIndex()) ||
+                     (args.lastLogTerm == node.termAt(node.lastLogIndex()) &&
+                      args.lastLogIndex >= node.lastLogIndex());
+        bool grant = leaderStale && logOk && args.term > node.currentTerm;
+        send(node.id, from, RequestVoteReply{node.currentTerm, grant, /*preVote=*/true});
     }
 
     void handle(Node& node, int from, const RequestVoteReply& reply) {
+        if (reply.preVote) {
+            if (reply.term > node.currentTerm) {
+                stepDown(node, reply.term);
+                return;
+            }
+            if (node.role != Role::Candidate) return;
+            if (reply.voteGranted && ++node.preVotesGranted >= majority())
+                startElection(node);  // pre-vote passed → real, term-incrementing election
+            (void)from;
+            return;
+        }
         if (reply.term > node.currentTerm) {
             stepDown(node, reply.term);
             return;
@@ -346,40 +549,57 @@ class Cluster {
 
     void handle(Node& node, int from, const AppendEntriesArgs& args) {
         if (args.term < node.currentTerm) {
-            send(node.id, from, AppendEntriesReply{node.currentTerm, false, -1});
+            send(node.id, from, AppendEntriesReply{node.currentTerm, false, -1, args.readId});
             return;
         }
         // Valid leader for this term: (re)establish follower state and back off elections.
-        if (args.term > node.currentTerm) node.currentTerm = args.term;
+        if (args.term > node.currentTerm) {
+            node.currentTerm = args.term;
+            node.votedFor = -1;
+            persistHardState(node);
+        }
         node.role = Role::Follower;
-        node.votedFor = (node.votedFor == -1 ? from : node.votedFor);
+        node.lastLeaderContact = now_;
         resetElectionTimer(node);
 
-        // Log consistency check at prevLogIndex.
-        if (args.prevLogIndex >= 0 && (args.prevLogIndex > node.lastLogIndex() ||
-                                       node.termAt(args.prevLogIndex) != args.prevLogTerm)) {
-            send(node.id, from, AppendEntriesReply{node.currentTerm, false, -1});
+        // Log consistency check at prevLogIndex (only meaningful at/after our snapshot boundary;
+        // anything below lastIncludedIndex is committed and matches by Log Matching).
+        if (args.prevLogIndex >= node.lastIncludedIndex &&
+            (args.prevLogIndex > node.lastLogIndex() ||
+             node.termAt(args.prevLogIndex) != args.prevLogTerm)) {
+            send(node.id, from, AppendEntriesReply{node.currentTerm, false, -1, args.readId});
             return;
         }
 
-        // Append, truncating only on a real conflict (never blindly overwrite).
+        // Append, truncating only on a real conflict (never blindly overwrite). Skip any entries
+        // already covered by our snapshot.
+        bool changed = false;
         int index = args.prevLogIndex;
         for (const auto& entry : args.entries) {
             ++index;
+            if (index < node.firstIndex()) continue;  // predates our snapshot; already durable
             if (index <= node.lastLogIndex()) {
                 if (node.termAt(index) != entry.term) {
-                    node.log.resize(index);
+                    node.log.resize(index - node.firstIndex());
                     node.log.push_back(entry);
+                    changed = true;
                 }
             } else {
                 node.log.push_back(entry);
+                changed = true;
             }
         }
+        if (changed) persistLog(node);
+
         int lastNew = args.prevLogIndex + static_cast<int>(args.entries.size());
         if (args.leaderCommit > node.commitIndex)
             node.commitIndex = std::min(args.leaderCommit, lastNew);
+        node.commitIndex = std::max(node.commitIndex, node.lastIncludedIndex);
         applyCommitted(node);
-        send(node.id, from, AppendEntriesReply{node.currentTerm, true, lastNew});
+        maybeSnapshot(node);
+        send(node.id, from,
+             AppendEntriesReply{node.currentTerm, true, std::max(lastNew, node.lastIncludedIndex),
+                                args.readId});
     }
 
     void handle(Node& node, int from, const AppendEntriesReply& reply) {
@@ -391,9 +611,71 @@ class Cluster {
         if (reply.success) {
             node.matchIndex[from] = std::max(node.matchIndex[from], reply.matchIndex);
             node.nextIndex[from] = node.matchIndex[from] + 1;
+            // ReadIndex: confirm leadership once a MAJORITY of DISTINCT peers ack this round.
+            if (reply.readId != 0 && reply.readId == node.currentReadId && !node.readConfirmed) {
+                if (from >= 0 && from < static_cast<int>(node.readAckedBy.size()))
+                    node.readAckedBy[from] = 1;
+                int acks = 0;
+                for (char c : node.readAckedBy)
+                    if (c) ++acks;
+                if (acks >= majority()) node.readConfirmed = true;
+            }
             advanceCommit(node);
         } else {
             node.nextIndex[from] = std::max(0, node.nextIndex[from] - 1);
+        }
+    }
+
+    void handle(Node& node, int from, const InstallSnapshotArgs& args) {
+        if (args.term < node.currentTerm) {
+            send(node.id, from, InstallSnapshotReply{node.currentTerm, -1});
+            return;
+        }
+        if (args.term > node.currentTerm) {
+            node.currentTerm = args.term;
+            node.votedFor = -1;
+            persistHardState(node);
+        }
+        node.role = Role::Follower;
+        node.lastLeaderContact = now_;
+        resetElectionTimer(node);
+
+        if (args.lastIncludedIndex <= node.lastIncludedIndex) {
+            // We already have this snapshot (or better).
+            send(node.id, from, InstallSnapshotReply{node.currentTerm, node.lastIncludedIndex});
+            return;
+        }
+
+        // Retain any log suffix that is consistent with the snapshot point; otherwise discard all.
+        if (node.hasEntry(args.lastIncludedIndex) &&
+            node.termAt(args.lastIncludedIndex) == args.lastIncludedTerm) {
+            std::vector<LogEntry> keep;
+            for (int i = args.lastIncludedIndex + 1; i <= node.lastLogIndex(); ++i)
+                keep.push_back(node.entryAt(i));
+            node.log = std::move(keep);
+        } else {
+            node.log.clear();
+        }
+        node.lastIncludedIndex = args.lastIncludedIndex;
+        node.lastIncludedTerm = args.lastIncludedTerm;
+        node.store.restore(KVStore::deserialize(args.data));
+        node.commitIndex = std::max(node.commitIndex, node.lastIncludedIndex);
+        node.lastApplied = std::max(node.lastApplied, node.lastIncludedIndex);
+        node.storage->saveSnapshot(node.lastIncludedIndex, node.lastIncludedTerm,
+                                   node.store.serialize(), node.log);
+        send(node.id, from, InstallSnapshotReply{node.currentTerm, node.lastIncludedIndex});
+    }
+
+    void handle(Node& node, int from, const InstallSnapshotReply& reply) {
+        if (reply.term > node.currentTerm) {
+            stepDown(node, reply.term);
+            return;
+        }
+        if (node.role != Role::Leader || reply.term != node.currentTerm) return;
+        if (reply.matchIndex >= 0) {
+            node.matchIndex[from] = std::max(node.matchIndex[from], reply.matchIndex);
+            node.nextIndex[from] = node.matchIndex[from] + 1;
+            advanceCommit(node);
         }
     }
 
@@ -407,6 +689,7 @@ class Cluster {
             if (replicas >= majority()) {
                 leader.commitIndex = idx;
                 applyCommitted(leader);
+                maybeSnapshot(leader);
                 break;
             }
         }
@@ -415,21 +698,26 @@ class Cluster {
     void applyCommitted(Node& node) {
         while (node.lastApplied < node.commitIndex) {
             ++node.lastApplied;
-            const LogEntry& entry = node.log[node.lastApplied];
+            const LogEntry& entry = node.entryAt(node.lastApplied);
             node.store.apply(entry);
             recordCommitted(node.lastApplied, entry);
         }
     }
 
-    void replayCommittedAfterRestart(Node& node) {
-        // Reconstruct the state machine from the (persistent) log up to what we can prove
-        // committed; conservatively replay nothing beyond the known committed prefix.
-        for (int i = 0; i < static_cast<int>(committedLog_.size()) && i <= node.lastLogIndex();
-             ++i) {
-            node.store.apply(node.log[i]);
-            node.lastApplied = i;
-            node.commitIndex = i;
-        }
+    // Compact the applied prefix into a snapshot and truncate the log, bounding its growth. Only
+    // applied (hence committed) entries are snapshotted, so the state machine image is safe.
+    void maybeSnapshot(Node& node) {
+        if (cfg_.snapshotThreshold <= 0) return;
+        if (node.lastApplied - node.lastIncludedIndex < cfg_.snapshotThreshold) return;
+        int newLast = node.lastApplied;
+        int newTerm = node.termAt(newLast);
+        int drop = newLast - node.lastIncludedIndex;  // entries to remove from the front
+        if (drop <= 0) return;
+        node.log.erase(node.log.begin(), node.log.begin() + drop);
+        node.lastIncludedIndex = newLast;
+        node.lastIncludedTerm = newTerm;
+        node.storage->saveSnapshot(node.lastIncludedIndex, node.lastIncludedTerm,
+                                   node.store.serialize(), node.log);
     }
 
     // ---- network ----
@@ -471,12 +759,14 @@ class Cluster {
     }
     void checkInvariants() {
         // Log Matching: if two logs share the same term at an index, all prior entries match.
+        // Only compare indices both nodes still hold (snapshots may have compacted a prefix).
         for (int a = 0; a < n_; ++a)
             for (int b = a + 1; b < n_; ++b) {
-                int lim = std::min(nodes_[a].lastLogIndex(), nodes_[b].lastLogIndex());
-                for (int i = 0; i <= lim; ++i)
+                int lo = std::max(nodes_[a].firstIndex(), nodes_[b].firstIndex());
+                int hi = std::min(nodes_[a].lastLogIndex(), nodes_[b].lastLogIndex());
+                for (int i = lo; i <= hi; ++i)
                     if (nodes_[a].termAt(i) == nodes_[b].termAt(i) &&
-                        !(nodes_[a].log[i] == nodes_[b].log[i]))
+                        !(nodes_[a].entryAt(i) == nodes_[b].entryAt(i)))
                         fail("log matching: index " + std::to_string(i) +
                              " differs for equal term");
             }
@@ -488,6 +778,7 @@ class Cluster {
     int n_;
     Config cfg_;
     std::mt19937_64 rng_;
+    StorageFactory factory_;
     std::int64_t now_ = 0;
     std::int64_t seq_ = 0;
     std::vector<Node> nodes_;

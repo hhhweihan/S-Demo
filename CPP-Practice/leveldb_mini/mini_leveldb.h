@@ -1,361 +1,315 @@
 #pragma once
 
+// mini LevelDB —— umbrella 头。F3 崩溃安全化改造后，各部件下沉到 lsm/ 子目录，本文件只做两件事：
+//   1) 汇总包含各部件（Slice/Status/Arena/SkipList/BloomFilter/CRC32C/WAL/Block/SSTable/MemTable/
+//      Version），让既有 `#include "mini_leveldb.h"` 与 `mini_lsm::` 命名保持不变；
+//   2) 承载崩溃安全的 WAL 封装与 MiniDB（写路径、immutable flush→L0、L0→L1 compaction、Recover）。
+//
+// 崩溃安全模型（write-ahead + durable SSTable）：
+//   - 每次 Put/Delete：先把记录追加进 WAL 并 fsync 落盘，**之后**才改内存 MemTable。返回成功 ⇒ 已
+//     durable。进程/机器崩溃后 Recover() 回放 WAL 完整记录，已确认写不丢；崩溃瞬间没写完的尾部
+//     record 因 CRC/长度校验失败被干净丢弃（见 lsm/record_log.h）。
+//   - Flush()：MemTable → 新 L0 SSTable（写完 fsync），落盘成功后**轮转 WAL**（清空）——此时数据已在
+//     SSTable，WAL 使命完成。若在"SSTable 落盘"与"WAL 清空"之间崩溃，恢复会同时载入 SSTable 并重放
+//     WAL（内容重复但幂等，Get 以 MemTable 优先，值一致），不丢不错。
+//   - SSTable 写入用 O_TRUNC+fsync；半写文件因 footer magic 缺失被 Load 判为 invalid
+//   并在恢复时跳过，
+//     其数据仍在未轮转的 WAL 中，可被重放恢复。
+
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <algorithm>
-#include <array>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <functional>
+#include <map>
 #include <memory>
 #include <optional>
-#include <random>
-#include <sstream>
-#include <stdexcept>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "lsm/block.h"
+#include "lsm/coding.h"
+#include "lsm/crc32c.h"
+#include "lsm/memtable.h"
+#include "lsm/record_log.h"
+#include "lsm/skiplist.h"
+#include "lsm/table.h"
+#include "lsm/version.h"
+
 namespace mini_lsm {
 
-class Slice {
+// WAL 封装：在 lsm/record_log.h 的 CRC record 帧之上，定义 LSM 写记录的 payload 编码并提供
+// 打开/追加/回放/轮转。payload = seq(8) + type(1) + keylen(4) + key + vallen(4) + value。
+class WAL {
  public:
-    Slice() = default;
-    Slice(std::string_view value) : value_(value) {}
-    const char* data() const { return value_.data(); }
-    std::size_t size() const { return value_.size(); }
-    bool empty() const { return value_.empty(); }
-    std::string ToString() const { return std::string(value_); }
-
- private:
-    // 非拥有视图：调用方须保证被引用的字节在 Slice 存活期间不失效。
-    std::string_view value_;
-};
-
-class Status {
- public:
-    static Status OK() { return Status(); }
-    static Status NotFound(std::string message) { return Status(false, std::move(message)); }
-    bool ok() const { return ok_; }
-    std::string ToString() const { return ok_ ? "OK" : message_; }
-
- private:
-    Status() = default;
-    Status(bool ok, std::string message) : ok_(ok), message_(std::move(message)) {}
-    bool ok_ = true;
-    std::string message_;
-};
-
-class Arena {
- public:
-    // 只分配不单独释放：所有块随 Arena 一起销毁，换取分配路径无碎片、无 per-node free。
-    void* Allocate(std::size_t bytes) {
-        blocks_.push_back(std::make_unique<char[]>(bytes));
-        memory_usage_ += bytes;
-        return blocks_.back().get();
-    }
-    std::size_t memory_usage() const { return memory_usage_; }
-
- private:
-    std::vector<std::unique_ptr<char[]>> blocks_;
-    std::size_t memory_usage_ = 0;
-};
-
-template <typename Key, typename Value, typename Compare = std::less<Key>>
-class SkipList {
-    static constexpr int kMaxHeight = 12;
-    static constexpr int kBranching = 4;  // 每升一层概率 1/4，期望节点高度 O(1)，查找 O(log n)。
-    struct Node {
-        Key key;
-        Value value;
-        std::vector<Node*> next;  // next[i] 为第 i 层后继；层数越高跨度越大，实现对数级跳跃。
-        Node(Key key, Value value, int height)
-            : key(std::move(key)), value(std::move(value)), next(height, nullptr) {}
+    struct Record {
+        std::uint64_t sequence = 0;
+        ValueType type = ValueType::kValue;
+        std::string key;
+        std::string value;
     };
 
- public:
-    class iterator {
-     public:
-        explicit iterator(Node* node = nullptr) : node_(node) {}
-        iterator& operator++() {
-            node_ = node_->next[0];
-            return *this;
-        }  // 第 0 层串起全部节点，故遍历即有序序列。
-        bool operator==(const iterator& other) const { return node_ == other.node_; }
-        bool operator!=(const iterator& other) const { return !(*this == other); }
-        const Key& key() const { return node_->key; }
-        const Value& value() const { return node_->value; }
-
-     private:
-        Node* node_ = nullptr;
-    };
-
-    SkipList()
-        : head_(new Node(Key{}, Value{}, kMaxHeight)),
-          rng_(7) {}  // rng 固定种子 → 结构可复现，便于测试。
-
-    void Insert(const Key& key, const Value& value) {
-        std::array<Node*, kMaxHeight> prev{};
-        Node* existing =
-            FindGreaterOrEqual(key, prev.data());  // 顺带记录各层前驱，供后续接线使用。
-        if (existing && equal(existing->key, key)) {
-            existing->value = value;  // upsert：同 key 覆盖旧值，不新增节点。
-            return;
-        }
-        const int height = RandomHeight();
-        if (height > max_height_) {
-            // 新节点比现有塔更高，超出部分的前驱只能是 head。
-            for (int level = max_height_; level < height; ++level) prev[level] = head_.get();
-            max_height_ = height;
-        }
-        auto node = std::make_unique<Node>(key, value, height);
-        Node* raw = node.get();
-        for (int level = 0; level < height; ++level) {
-            raw->next[level] = prev[level]->next[level];
-            prev[level]->next[level] = raw;
-        }
-        nodes_.push_back(
-            std::move(node));  // 所有权集中在 nodes_，next 指针仅作导航，避免递归析构。
-        ++size_;
+    explicit WAL(std::filesystem::path path) : path_(std::move(path)) {
+        std::filesystem::create_directories(path_.parent_path());
+        writer_.Open(path_.string());
     }
 
-    std::optional<Value> Find(const Key& key) const {
-        Node* node = FindGreaterOrEqual(key, nullptr);
-        if (node && equal(node->key, key)) return node->value;
-        return std::nullopt;
+    // 追加一条写记录并落盘。返回是否成功（写出 + fsync）。
+    bool Append(std::uint64_t sequence, ValueType type, const std::string& key,
+                const std::string& value) {
+        std::string payload;
+        PutFixed64(&payload, sequence);
+        payload.push_back(static_cast<char>(type));
+        PutFixed32(&payload, static_cast<std::uint32_t>(key.size()));
+        payload.append(key);
+        PutFixed32(&payload, static_cast<std::uint32_t>(value.size()));
+        payload.append(value);
+        if (!writer_.AddRecord(payload)) {
+            return false;
+        }
+        return writer_.Sync();  // 返回前落盘 —— 崩溃安全的关键
     }
 
-    iterator begin() const {
-        return iterator(head_->next[0]);
-    }  // 跳过哨兵 head，从首个真实节点开始。
-    iterator end() const { return iterator(); }
-    std::size_t size() const { return size_; }
-    int max_height() const { return max_height_; }
-
- private:
-    int RandomHeight() {
-        int height = 1;
-        while (height < kMaxHeight && (rng_() % kBranching == 0))
-            ++height;  // 每层 1/kBranching 概率继续升高。
-        return height;
-    }
-
-    // 从最高层向右、够不着再下降的经典跳表搜索：每层跨过一段小于 key 的节点，整体 O(log n)。
-    Node* FindGreaterOrEqual(const Key& key, Node** prev) const {
-        Node* current = head_.get();
-        int level = max_height_ - 1;
-        while (true) {
-            Node* next = current->next[level];
-            if (next && compare_(next->key, key)) {
-                current = next;  // 后继仍小于 key，同层继续右移。
-            } else {
-                if (prev) prev[level] = current;  // 记录本层前驱，插入时据此接线。
-                if (level == 0) return next;      // 落到底层，next 即第一个 >= key 的节点。
-                --level;
+    // 回放所有完整记录（遇首个损坏/截断 record 即停，见 RecordReader）。解析失败的 payload 被跳过。
+    std::vector<Record> Replay() const {
+        std::vector<Record> out;
+        for (const std::string& payload : RecordReader::Replay(path_.string())) {
+            Record r;
+            if (DecodePayload(payload, &r)) {
+                out.push_back(std::move(r));
             }
         }
+        return out;
     }
 
-    bool equal(const Key& lhs, const Key& rhs) const {
-        return !compare_(lhs, rhs) && !compare_(rhs, lhs);
-    }  // 仅凭 Compare 判等，不额外要求 operator==。
-
-    std::unique_ptr<Node> head_;  // 哨兵头节点，高度恒为 kMaxHeight，简化插入边界。
-    std::vector<std::unique_ptr<Node>> nodes_;
-    std::size_t size_ = 0;
-    int max_height_ = 1;
-    Compare compare_{};
-    std::mt19937 rng_;
-};
-
-class BloomFilter {
- public:
-    explicit BloomFilter(std::size_t bits = 2048) : bits_(bits, false) {}
-    void Add(const std::string& key) {
-        for (std::uint32_t seed : {0x9e3779b9u, 0x85ebca6bu, 0xc2b2ae35u})
-            bits_[Hash(key, seed) % bits_.size()] = true;  // 三个独立哈希降低误判率。
-    }
-    // 只用于快速否定：全命中说明“可能存在”（允许假阳性），任一位缺失即“确定不存在”。
-    bool MayContain(const std::string& key) const {
-        for (std::uint32_t seed : {0x9e3779b9u, 0x85ebca6bu, 0xc2b2ae35u}) {
-            if (!bits_[Hash(key, seed) % bits_.size()]) return false;
+    // 轮转：flush 后 MemTable 数据已进 SSTable，清空 WAL 从头再记。
+    void Reset() {
+        writer_.Close();
+        // O_TRUNC 清空文件，再以 append 重新打开。
+        const int fd = ::open(path_.string().c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd >= 0) {
+            ::close(fd);
         }
+        writer_.Open(path_.string());
+    }
+
+ private:
+    static bool DecodePayload(const std::string& payload, Record* r) {
+        std::size_t pos = 0;
+        if (payload.size() < 8 + 1 + 4) return false;
+        r->sequence = DecodeFixed64(payload.data() + pos);
+        pos += 8;
+        r->type = static_cast<ValueType>(static_cast<std::uint8_t>(payload[pos]));
+        pos += 1;
+        const std::uint32_t klen = DecodeFixed32(payload.data() + pos);
+        pos += 4;
+        if (pos + klen + 4 > payload.size()) return false;
+        r->key = payload.substr(pos, klen);
+        pos += klen;
+        const std::uint32_t vlen = DecodeFixed32(payload.data() + pos);
+        pos += 4;
+        if (pos + vlen > payload.size()) return false;
+        r->value = payload.substr(pos, vlen);
         return true;
     }
 
- private:
-    static std::uint32_t Hash(const std::string& key, std::uint32_t seed) {
-        std::uint32_t hash = seed;
-        for (unsigned char ch : key) hash = (hash ^ ch) * 16777619u;  // FNV-1a 风格混合。
-        return hash;
-    }
-    std::vector<bool> bits_;
-};
-
-class MemTable {
- public:
-    void Put(std::uint64_t sequence, const std::string& key, const std::string& value) {
-        table_.Insert(EncodeInternalKey(sequence, key),
-                      value);  // 以 internal key 存储，让同一 user key 的多版本共存。
-    }
-    // 同一 user key 可能有多条不同序列号的记录，取序列号最大者即最新写入。
-    std::optional<std::string> Get(const std::string& key) const {
-        std::optional<std::string> latest;
-        std::uint64_t latest_sequence = 0;
-        for (auto it = table_.begin(); it != table_.end(); ++it) {
-            auto decoded = DecodeInternalKey(it.key());
-            if (decoded.user_key == key && decoded.sequence >= latest_sequence) {
-                latest_sequence = decoded.sequence;
-                latest = it.value();
-            }
-        }
-        return latest;
-    }
-    std::vector<std::pair<std::string, std::string>> EntriesByUserKey() const {
-        std::vector<std::pair<std::string, std::string>> entries;
-        for (auto it = table_.begin(); it != table_.end(); ++it) {
-            auto decoded = DecodeInternalKey(it.key());
-            entries.push_back({decoded.user_key, it.value()});
-        }
-        std::sort(entries.begin(), entries.end());
-        // 落盘前按 user key 去重：SSTable 每个 key 只保留一条，供二分查找。
-        entries.erase(
-            std::unique(entries.begin(), entries.end(),
-                        [](const auto& lhs, const auto& rhs) { return lhs.first == rhs.first; }),
-            entries.end());
-        return entries;
-    }
-    std::size_t size() const { return table_.size(); }
-
- private:
-    struct DecodedKey {
-        std::uint64_t sequence;
-        std::string user_key;
-    };
-    // internal key = user_key#sequence；教学用文本编码，真 LevelDB 用定长小端整数。
-    static std::string EncodeInternalKey(std::uint64_t sequence, const std::string& key) {
-        return key + "#" + std::to_string(sequence);
-    }
-    static DecodedKey DecodeInternalKey(const std::string& internal_key) {
-        const auto pos = internal_key.rfind('#');  // 用最后一个 '#' 分隔，容忍 user key 内含 '#'。
-        return {std::stoull(internal_key.substr(pos + 1)), internal_key.substr(0, pos)};
-    }
-    SkipList<std::string, std::string> table_;
-};
-
-class SSTable {
- public:
-    void Build(const std::filesystem::path& path,
-               const std::vector<std::pair<std::string, std::string>>& entries) {
-        path_ = path;
-        std::ofstream out(path_, std::ios::trunc);
-        data_ = entries;
-        std::sort(data_.begin(),
-                  data_.end());  // SSTable 的核心契约：条目按 key 有序，才能二分查找。
-        for (const auto& [key, value] : data_) {
-            bloom_.Add(key);  // 同步构建 bloom，读路径可先否定缺失 key。
-            out << key << '\t' << value << '\n';
-        }
-    }
-    void Load(const std::filesystem::path& path) {
-        path_ = path;
-        data_.clear();
-        std::ifstream in(path_);
-        std::string line;
-        while (std::getline(in, line)) {
-            const auto pos = line.find('\t');
-            if (pos == std::string::npos) continue;  // 跳过残缺行，容忍写入中途崩溃产生的截断。
-            data_.push_back({line.substr(0, pos), line.substr(pos + 1)});
-            bloom_.Add(data_.back().first);
-        }
-        std::sort(data_.begin(), data_.end());  // 文件本已有序，重排是防御性保险。
-    }
-    std::optional<std::string> Get(const std::string& key) const {
-        if (!bloom_.MayContain(key))
-            return std::nullopt;  // bloom 先挡掉绝大多数缺失 key，省去二分。
-        auto it = std::lower_bound(data_.begin(), data_.end(),
-                                   std::pair<std::string, std::string>{key, ""});
-        if (it != data_.end() && it->first == key) return it->second;
-        return std::nullopt;
-    }
-    std::size_t size() const { return data_.size(); }
-
- private:
     std::filesystem::path path_;
-    std::vector<std::pair<std::string, std::string>> data_;
-    BloomFilter bloom_;
-};
-
-class WAL {
- public:
-    explicit WAL(std::filesystem::path path) : path_(std::move(path)) {
-        std::filesystem::create_directories(path_.parent_path());
-    }
-    void Append(std::uint64_t sequence, const std::string& key, const std::string& value) {
-        std::ofstream out(path_, std::ios::app);  // 追加写：崩溃前已落盘的记录不会被覆盖。
-        out << sequence << '\t' << key << '\t' << value << '\n';
-    }
-    std::vector<std::tuple<std::uint64_t, std::string, std::string>> Replay() const {
-        std::vector<std::tuple<std::uint64_t, std::string, std::string>> records;
-        std::ifstream in(path_);
-        std::string line;
-        while (std::getline(in, line)) {
-            std::istringstream input(line);
-            std::string sequence_text;
-            std::string key;
-            std::string value;
-            // 只有三段齐全才算完整记录；末尾半行（崩溃残留）被自然丢弃。
-            if (std::getline(input, sequence_text, '\t') && std::getline(input, key, '\t') &&
-                std::getline(input, value)) {
-                records.push_back({std::stoull(sequence_text), key, value});
-            }
-        }
-        return records;
-    }
-
- private:
-    std::filesystem::path path_;
+    RecordWriter writer_;
 };
 
 class MiniDB {
  public:
+    // L0 文件数达到此阈值即触发 L0→L1 compaction。
+    static constexpr std::size_t kL0CompactionTrigger = 4;
+
     explicit MiniDB(std::filesystem::path directory)
         : directory_(std::move(directory)), wal_(directory_ / "wal.log") {
         std::filesystem::create_directories(directory_);
     }
+
+    // 重开库：扫描目录载入已有 SSTable（按文件名解析 level/number），再回放 WAL 重建 MemTable。
     void Recover() {
-        for (const auto& [sequence, key, value] : wal_.Replay()) {
-            mem_.Put(sequence, key, value);
-            sequence_ =
-                std::max(sequence_, sequence);  // 续用历史最大序列号，避免恢复后新写入序列号回退。
+        LoadExistingTables();
+        for (const auto& rec : wal_.Replay()) {
+            if (rec.type == ValueType::kValue) {
+                mem_.Put(rec.sequence, rec.key, rec.value);
+            } else {
+                mem_.Delete(rec.sequence, rec.key);
+            }
+            sequence_ = std::max(sequence_, rec.sequence);
         }
     }
+
     void Put(const std::string& key, const std::string& value) {
         const auto sequence = ++sequence_;
-        // 先写 WAL 再改内存表：一旦 memtable 未落盘就崩溃，仍可由 WAL 回放恢复（write-ahead）。
-        wal_.Append(sequence, key, value);
-        mem_.Put(sequence, key, value);
+        wal_.Append(sequence, ValueType::kValue, key, value);  // 先 WAL 落盘
+        mem_.Put(sequence, key, value);                        // 再改内存
     }
+
+    // 删除：写一条墓碑（tombstone），遮蔽 SSTable 里的旧值，直到 compaction 到最底层回收。
+    void Delete(const std::string& key) {
+        const auto sequence = ++sequence_;
+        wal_.Append(sequence, ValueType::kDeletion, key, std::string());
+        mem_.Delete(sequence, key);
+    }
+
+    // 跨层查找：MemTable → L0（新→旧）→ L1。任一层命中值即返回；命中墓碑即"不存在"。
     std::optional<std::string> Get(const std::string& key) const {
-        if (auto value = mem_.Get(key))
-            return value;  // memtable 保存最新写入，优先于已落盘的旧版本。
-        return sstable_.Get(key);
+        std::string value;
+        switch (mem_.Lookup(key, &value)) {
+            case LookupStatus::kFound:
+                return value;
+            case LookupStatus::kDeleted:
+                return std::nullopt;
+            case LookupStatus::kNotFound:
+                break;
+        }
+        // L0：文件可能范围重叠，必须从最新（末尾）向最旧查。
+        for (auto it = level0_.rbegin(); it != level0_.rend(); ++it) {
+            switch ((*it)->Lookup(key, &value)) {
+                case LookupStatus::kFound:
+                    return value;
+                case LookupStatus::kDeleted:
+                    return std::nullopt;
+                case LookupStatus::kNotFound:
+                    break;
+            }
+        }
+        // L1：compaction 后互不重叠且有序，逐个查（mini 版不做范围二分）。
+        for (const auto& table : level1_) {
+            switch (table->Lookup(key, &value)) {
+                case LookupStatus::kFound:
+                    return value;
+                case LookupStatus::kDeleted:
+                    return std::nullopt;
+                case LookupStatus::kNotFound:
+                    break;
+            }
+        }
+        return std::nullopt;
     }
+
+    // 把当前 MemTable 落成一个新的 L0 SSTable，然后轮转 WAL；必要时触发 compaction。
     void Flush() {
-        sstable_.Build(
-            directory_ / "000001.sst",
-            mem_.EntriesByUserKey());  // 教学版固定单文件名；真 LSM 会生成递增编号并分层。
+        if (mem_.empty()) {
+            return;
+        }
+        const std::uint64_t number = ++next_file_number_;
+        auto table = std::make_unique<SSTable>();
+        table->BuildFromEntries(SSTablePath(directory_, 0, number), mem_.ExportSorted());
+        level0_.push_back(std::move(table));
+        mem_.Clear();
+        wal_.Reset();  // 数据已 durable 进 SSTable，WAL 可清空
+
+        if (level0_.size() >= kL0CompactionTrigger) {
+            CompactToBottom();
+        }
     }
+
+    // L0（+现有 L1）→ 新 L1 的 leveled
+    // compaction。最新写覆盖旧写；到达最底层，墓碑被真正回收（丢弃）。
+    void CompactToBottom() {
+        if (level0_.empty()) {
+            return;
+        }
+        // 从旧到新归并：先 L1（最旧），再 L0 front→back（旧→新）。后写覆盖先写。
+        std::map<std::string, MemEntry> merged;
+        for (const auto& table : level1_) {
+            for (auto& e : table->Entries()) {
+                merged[e.user_key] = e;
+            }
+        }
+        for (const auto& table : level0_) {
+            for (auto& e : table->Entries()) {
+                merged[e.user_key] = e;
+            }
+        }
+
+        // 最底层输出：丢弃墓碑（kDeletion），只保留活跃值。
+        std::vector<MemEntry> output;
+        output.reserve(merged.size());
+        for (auto& [user_key, entry] : merged) {
+            if (entry.type == ValueType::kValue) {
+                output.push_back(std::move(entry));
+            }
+        }
+
+        // 收集待删旧文件路径，写出新 L1 文件后统一删盘。
+        std::vector<std::filesystem::path> obsolete;
+        for (const auto& table : level0_) obsolete.push_back(table->path());
+        for (const auto& table : level1_) obsolete.push_back(table->path());
+
+        std::vector<std::unique_ptr<SSTable>> new_level1;
+        if (!output.empty()) {
+            const std::uint64_t number = ++next_file_number_;
+            auto table = std::make_unique<SSTable>();
+            table->BuildFromEntries(SSTablePath(directory_, 1, number), std::move(output));
+            new_level1.push_back(std::move(table));
+        }
+
+        level0_.clear();
+        level1_ = std::move(new_level1);
+        for (const auto& path : obsolete) {
+            std::error_code ec;
+            std::filesystem::remove(path, ec);
+        }
+    }
+
     std::size_t MemSize() const { return mem_.size(); }
-    std::size_t SSTableSize() const { return sstable_.size(); }
+    // 已落盘条目总数（所有 SSTable 之和）。
+    std::size_t SSTableSize() const {
+        std::size_t total = 0;
+        for (const auto& t : level0_) total += t->size();
+        for (const auto& t : level1_) total += t->size();
+        return total;
+    }
+    std::size_t Level0FileCount() const { return level0_.size(); }
+    std::size_t Level1FileCount() const { return level1_.size(); }
 
  private:
+    // 扫描目录，按文件名解析 level/number，载入合法 SSTable，重建分层文件集与文件号计数。
+    void LoadExistingTables() {
+        struct Loaded {
+            std::uint64_t number;
+            int level;
+            std::unique_ptr<SSTable> table;
+        };
+        std::vector<Loaded> loaded;
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::directory_iterator(directory_, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file()) continue;
+            const std::string name = entry.path().filename().string();
+            int level = 0;
+            std::uint64_t number = 0;
+            if (!ParseSSTableFileName(name, &level, &number)) continue;
+            auto table = std::make_unique<SSTable>();
+            table->Load(entry.path());
+            if (!table->valid()) continue;  // 半写/损坏文件跳过（数据仍在 WAL）
+            next_file_number_ = std::max(next_file_number_, number);
+            loaded.push_back(Loaded{number, level, std::move(table)});
+        }
+        // L0 按 number 升序（旧→新，末尾最新）；L1 按 number 升序。
+        std::sort(loaded.begin(), loaded.end(),
+                  [](const Loaded& a, const Loaded& b) { return a.number < b.number; });
+        for (auto& l : loaded) {
+            if (l.level == 0) {
+                level0_.push_back(std::move(l.table));
+            } else {
+                level1_.push_back(std::move(l.table));
+            }
+        }
+    }
+
     std::filesystem::path directory_;
     WAL wal_;
     MemTable mem_;
-    SSTable sstable_;
-    std::uint64_t sequence_ = 0;  // 单调递增，为每次写入定序，决定同 key 的新旧。
+    std::vector<std::unique_ptr<SSTable>> level0_;  // 末尾最新
+    std::vector<std::unique_ptr<SSTable>> level1_;  // compaction 后互不重叠
+    std::uint64_t sequence_ = 0;
+    std::uint64_t next_file_number_ = 0;
 };
 
 }  // namespace mini_lsm

@@ -44,6 +44,7 @@ Leader 职责：
 | 阶段 46 | 日志复制 | [46-LogReplication](./46-LogReplication/) |
 | 阶段 47 | KV 状态机 + 持久化 | [47-KVStateMachine](./47-KVStateMachine/) |
 | 阶段 48 | 快照 + 稳定性测试 + 收尾 | [48-Snapshot-Finish](./48-Snapshot-Finish/) |
+| 阶段 49 | 生产化：持久化 + 快照/InstallSnapshot + ReadIndex + Pre-Vote | [49-Productionization](./49-Productionization/) |
 
 ## 验收标准
 
@@ -53,6 +54,10 @@ Leader 职责：
 - [x] kill leader 后，集群仍可写入（majority 存活）
 - [x] 节点能从 WAL-like log 恢复 committed KV 状态
 - [x] Snapshot 能安装 KV 状态到 follower
+- [x] 生产化改造：真持久化（crash 丢易失态 / restart 从 Storage 真磁盘重载）
+- [x] 快照 + 日志压缩 + InstallSnapshot（snapshot-aware 索引，落后 follower 追平）
+- [x] ReadIndex 线性一致读（不同节点多数派确认；少数派旧 Leader 读不可用）
+- [x] Pre-Vote 防扰动（分区节点重连不抬 term、不逼在任 Leader 下台）
 - [x] 150-300ms 随机选举超时模拟验收（固定种子 timeout：246/275/295ms）
 - [x] Leader failover 500ms 模拟验收（本机 wall-clock proxy：约 0.062ms）
 - [x] Put/Get 端到端延迟 < 20ms 模拟验收（本机 RaftKV proxy：约 0.060ms）
@@ -67,10 +72,11 @@ Leader 职责：
 - 阶段 46：完成 AppendEntries 日志复制和 commit/apply
 - 阶段 47：完成 KV 状态机、Put/Delete/Get 和 WAL-like 恢复
 - 阶段 48：完成 Snapshot、leader crash 后重选和模块验收
+- 阶段 49：生产化改造——真持久化（Storage 抽象 + FileStorage 原子写/CRC）、快照/InstallSnapshot、ReadIndex 线性一致读、Pre-Vote 防扰动；核心迁移到确定性离散事件仿真 `raft_sim.h`
 
 ## 模块总结
 
-本模块已完成 Mini Raft KV 的教学闭环：选举、日志复制、状态机应用、故障后重选、WAL-like 恢复和 snapshot。作为学习 demo，真实网络、真实 LevelDB 和线程计时压测均改为 proxy 模拟验收：随机 timeout、failover、Put/Get 延迟和 LevelDB-like 恢复都已通过。
+本模块已完成 Mini Raft KV 的教学闭环：选举、日志复制、状态机应用、故障后重选、WAL-like 恢复和 snapshot。阶段 49 进一步做了生产化改造：以 `raft_sim.h`（真 per-node RPC handler + 虚拟时间网络 + 每步安全不变量校验）为核心，补齐真持久化、日志压缩/InstallSnapshot、ReadIndex 线性一致读和 Pre-Vote，全部在本机 macOS/libc++ 以确定性多 seed 仿真验证。成员变更（joint consensus）与真实网络化推迟到后续。原 `mini_raft_kv.h` 降级为文档标注的上帝视角教学基线，仅供对照阅读，测试 target 只依赖 `raft_sim.h`。
 
 详细总结见 `Note/C++-Note/Month12-RaftKV实战总结.md`。
 

@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.16)
 
 project(raft_kv_demo LANGUAGES CXX)
 
-add_executable(raft_kv_demo main.cpp)
+set(RAFT_KV_HEADERS mini_raft_kv.h raft_sim.h raft_storage.h)
+add_executable(raft_kv_demo main.cpp ${RAFT_KV_HEADERS})
 target_compile_features(raft_kv_demo PRIVATE cxx_std_17)
 target_include_directories(raft_kv_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 

@@ -6,9 +6,10 @@ add_executable(lock_free_demo
     main.cpp
     concurrent/aba_demo.h
     concurrent/blocking_queue.h
-    concurrent/bounded_queue.h
+    concurrent/hazard_pointer.h
     concurrent/lock_free_stack.h
     concurrent/memory_order_experiments.h
+    concurrent/mpmc_queue.h
     concurrent/spsc_queue.h
 )
 
