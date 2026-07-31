@@ -15,3 +15,19 @@ CPP-Practice/raii/*.txt
 # not maintained) — keep it out for good instead of re-committing it on every checkout.
 *.o
 .DS_Store
+
+# Binary/build artifacts that were committed by mistake before (tar handouts, MSVC Debug
+# products, media). These are never source and must not re-enter the tree on any checkout.
+*.tar
+*.tar.gz
+*.exe
+*.ilk
+*.idb
+*.pdb
+*.suo
+*.obj
+*.a
+*.so
+*.so.*
+*.mp3
+*.mp4

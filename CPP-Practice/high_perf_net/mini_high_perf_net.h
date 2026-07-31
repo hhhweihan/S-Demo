@@ -5,7 +5,7 @@
 #include <deque>
 #include <functional>
 #include <limits>
-#include <map>
+#include <list>
 #include <optional>
 #include <queue>
 #include <stdexcept>
@@ -16,8 +16,9 @@
 
 namespace mini_hpn {
 
-// 时间轮：O(1) 管理海量连接的空闲超时。刷新连接只是写入新槽，旧槽里的过期项靠
-// tick 时对比 timers_ 里的最新截止刻度来甄别，无需从旧槽删除（惰性失效）。
+// 时间轮：add/refresh/cancel/查询均为摊还 O(1)。索引用 unordered_map（哈希，非 std::map
+// 的 O(log n)）；每个槽是一条 std::list，索引里连同截止刻度一并存下该连接在槽链表中的
+// 迭代器，故刷新/取消都能凭迭代器 O(1) 摘除旧节点，链表其余节点的迭代器不受影响。
 class TimerWheel {
  public:
     using Callback = std::function<void(int)>;
@@ -25,32 +26,58 @@ class TimerWheel {
         : slots_(slots), timeout_cb_(std::move(timeout_cb)) {}
     void add_or_refresh(int connection_id, std::size_t timeout_ticks) {
         std::size_t expire_tick = now_ + timeout_ticks;
-        timers_[connection_id] = expire_tick;  // 覆盖旧截止刻度即为“刷新”
-        wheel_[expire_tick % slots_].push_back(connection_id);
+        std::size_t slot = expire_tick % slots_;
+        auto it = timers_.find(connection_id);
+        if (it != timers_.end()) {
+            // 刷新：凭存下的迭代器 O(1) 从旧槽摘除，再挂到新槽，避免旧槽残留过期项。
+            wheel_[it->second.slot].erase(it->second.slot_it);
+            auto& bucket = wheel_[slot];
+            auto pos = bucket.insert(bucket.end(), connection_id);
+            it->second = Entry{expire_tick, slot, pos};
+        } else {
+            auto& bucket = wheel_[slot];
+            auto pos = bucket.insert(bucket.end(), connection_id);
+            timers_.emplace(connection_id, Entry{expire_tick, slot, pos});
+        }
+    }
+    // 取消一个待触发定时器：O(1) 从所在槽与索引一并摘除。取消不存在的键为安全空操作。
+    // 成功取消返回 true，键不存在返回 false。
+    bool cancel(int connection_id) {
+        auto it = timers_.find(connection_id);
+        if (it == timers_.end()) return false;  // 未知键：什么都不做
+        wheel_[it->second.slot].erase(it->second.slot_it);  // 凭迭代器 O(1) 摘除
+        timers_.erase(it);
+        return true;
     }
     void tick() {
         ++now_;
-        auto bucket_index = now_ % slots_;
-        auto bucket = std::move(wheel_[bucket_index]);
-        wheel_[bucket_index].clear();
-        for (int id : bucket) {
-            auto it = timers_.find(id);
-            // 关键：只有 timers_ 里的截止刻度确实到期才触发。被刷新过的连接其旧槽记录
-            // 会因截止刻度 > now_ 而被跳过，避免刷新后仍在旧刻度误触发超时。
-            if (it != timers_.end() && it->second <= now_) {
-                timers_.erase(it);
+        auto& bucket = wheel_[now_ % slots_];
+        for (auto it = bucket.begin(); it != bucket.end();) {
+            int id = *it;
+            auto ti = timers_.find(id);
+            // 只有截止刻度确实到期才触发；未到期项（跨圈情形）保留在槽内待后续圈处理。
+            if (ti != timers_.end() && ti->second.expire_tick <= now_) {
+                it = bucket.erase(it);  // O(1) 从槽摘除，list::erase 返回下一节点
+                timers_.erase(ti);
                 timeout_cb_(id);
+            } else {
+                ++it;
             }
         }
     }
     std::size_t now() const { return now_; }
 
  private:
+    struct Entry {
+        std::size_t expire_tick;             // 最新绝对截止刻度（唯一真相）
+        std::size_t slot;                    // 当前所在槽下标
+        std::list<int>::iterator slot_it;    // 在槽链表中的位置，供 O(1) 摘除
+    };
     std::size_t slots_;
     std::size_t now_ = 0;
-    std::map<int, std::size_t> timers_;  // 连接 -> 最新绝对截止刻度（唯一真相）
-    std::unordered_map<std::size_t, std::vector<int>>
-        wheel_;  // 槽 -> 候选连接（可能含已被刷新的过期项）
+    std::unordered_map<int, Entry> timers_;          // 连接 -> 截止刻度 + 槽内位置
+    std::unordered_map<std::size_t, std::list<int>>  // 槽 -> 该刻度待触发的连接链表
+        wheel_;
     Callback timeout_cb_;
 };
 

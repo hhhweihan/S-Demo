@@ -119,9 +119,11 @@ class Optional {
         }
     }
 
-    T* ptr() noexcept { return reinterpret_cast<T*>(&storage_); }
+    // std::launder：storage_ 是 aligned_storage,真正的 T 是靠 placement new 建在其上的;
+    // 直接 reinterpret_cast 存储地址得到的指针编译器不保证指向那个新对象,须经 launder 提示。
+    T* ptr() noexcept { return std::launder(reinterpret_cast<T*>(&storage_)); }
 
-    const T* ptr() const noexcept { return reinterpret_cast<const T*>(&storage_); }
+    const T* ptr() const noexcept { return std::launder(reinterpret_cast<const T*>(&storage_)); }
 
     Storage storage_;
     bool has_value_ = false;  // 不变量：为 true 当且仅当 storage_ 中有一个存活的 T。

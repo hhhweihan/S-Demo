@@ -124,6 +124,10 @@ class SkipList {
         return std::nullopt;
     }
 
+    // 定位到第一个 key >= 目标的节点，返回迭代器（无满足者则 == end()）。沿跳表逐层下降，O(log n)，
+    // 供 MemTable::Lookup 直接跳到目标 user_key 处，取代 begin() 起的线性扫描。
+    iterator Seek(const Key& key) const { return iterator(FindGreaterOrEqual(key, nullptr)); }
+
     iterator begin() const {
         return iterator(head_->next[0]);
     }  // 跳过哨兵 head，从首个真实节点开始。

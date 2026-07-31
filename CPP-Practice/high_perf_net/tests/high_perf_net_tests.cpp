@@ -57,6 +57,43 @@ TEST(TimerWheel, FiresMultipleTimersInSlotInsertionOrder) {
     EXPECT_EQ(fired[1], 20);
 }
 
+TEST(TimerWheel, CancelPreventsTimerFromFiring) {
+    std::vector<int> fired;
+    TimerWheel wheel(8, [&fired](int id) { fired.push_back(id); });
+    wheel.add_or_refresh(1, 3);
+    wheel.add_or_refresh(2, 3);
+    EXPECT_TRUE(wheel.cancel(1));  // 取消存在的定时器返回 true
+    wheel.tick();
+    wheel.tick();
+    wheel.tick();  // now == 3：两者原定在此到期，但 1 已取消
+    ASSERT_EQ(fired.size(), 1u);
+    EXPECT_EQ(fired.front(), 2);
+}
+
+TEST(TimerWheel, CancelUnknownKeyIsNoOp) {
+    std::vector<int> fired;
+    TimerWheel wheel(8, [&fired](int id) { fired.push_back(id); });
+    wheel.add_or_refresh(1, 2);
+    EXPECT_FALSE(wheel.cancel(99));  // 未知键：安全空操作，返回 false
+    wheel.tick();
+    wheel.tick();  // now == 2：未受影响的定时器照常触发
+    ASSERT_EQ(fired.size(), 1u);
+    EXPECT_EQ(fired.front(), 1);
+}
+
+TEST(TimerWheel, CancelThenReaddSchedulesFreshTimer) {
+    std::vector<int> fired;
+    TimerWheel wheel(8, [&fired](int id) { fired.push_back(id); });
+    wheel.add_or_refresh(1, 2);
+    EXPECT_TRUE(wheel.cancel(1));
+    EXPECT_FALSE(wheel.cancel(1));  // 二次取消同一键已不存在
+    wheel.add_or_refresh(1, 2);     // 重新加入，视为全新定时器
+    wheel.tick();
+    wheel.tick();  // now == 2
+    ASSERT_EQ(fired.size(), 1u);
+    EXPECT_EQ(fired.front(), 1);
+}
+
 TEST(PrecisionTimerHeap, PopsExpiredInAscendingOrder) {
     PrecisionTimerHeap heap;
     heap.add(1, 30);

@@ -16,6 +16,11 @@
 #include <utility>
 #include <vector>
 
+#if !defined(_WIN32)
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
 namespace mini_log {
 
 enum class Level { Debug, Info, Warn, Error, Fatal };
@@ -121,32 +126,60 @@ class FileSink : public Sink {
         std::filesystem::create_directories(directory_);
         open_for_today();
     }
+    ~FileSink() override {
+#if !defined(_WIN32)
+        if (fd_ >= 0) ::close(fd_);
+#endif
+    }
     void write(const std::string& line) override {
         std::lock_guard<std::mutex> lock(mutex_);
-        open_for_today();  // 每次写入前检查日期，跨零点自动滚动到新文件。
+        open_for_today();  // 跨零点自动滚动到新文件；同一天复用缓存，不再每行重算日期串。
         file_ << line;
     }
     void flush() override {
         std::lock_guard<std::mutex> lock(mutex_);
+        // ofstream::flush 只把数据交给 OS page cache，宕机仍会丢；必须再对底层 fd 做
+        // fdatasync 强制刷到磁盘，flush() 才真正意味着“已落盘（durable）”。
         file_.flush();
+#if !defined(_WIN32)
+        if (fd_ >= 0) ::fdatasync(fd_);
+#endif
     }
     std::filesystem::path current_path() const { return current_path_; }
 
  private:
     void open_for_today() {
-        const std::string today = date_stamp();
-        if (today == current_date_ && file_.is_open())
-            return;  // 日期未变则复用已开文件，避免每行都重开流。
-        current_date_ = today;
-        current_path_ = directory_ / (prefix_ + "-" + today + ".log");
+        const std::time_t now = std::time(nullptr);
+        std::tm tm{};
+#if defined(_WIN32)
+        localtime_s(&tm, &now);
+#else
+        localtime_r(&now, &tm);
+#endif
+        // 用整数“天号”缓存当前日期：仅当天号变化才重算日期串并重开文件，
+        // 避免每行都走 ostringstream + put_time 的昂贵格式化。
+        const long day = (tm.tm_year + 1900) * 10000L + (tm.tm_mon + 1) * 100 + tm.tm_mday;
+        if (day == current_day_ && file_.is_open()) return;
+        current_day_ = day;
+        std::ostringstream stamp;  // 仅在换天时执行一次，不再进热路径，可安心用 put_time。
+        stamp << std::put_time(&tm, "%Y%m%d");
+        current_path_ = directory_ / (prefix_ + "-" + stamp.str() + ".log");
         file_.close();
         file_.open(current_path_, std::ios::app);  // 追加模式：进程重启不覆盖当天已有日志。
+#if !defined(_WIN32)
+        // 额外持有一个只用于 fsync 的底层 fd（写入仍走 ofstream），跨天滚动时同步重开。
+        if (fd_ >= 0) ::close(fd_);
+        fd_ = ::open(current_path_.c_str(), O_WRONLY | O_APPEND | O_CREAT, 0644);
+#endif
     }
     std::filesystem::path directory_;
     std::string prefix_;
-    std::string current_date_;
+    long current_day_ = -1;
     std::filesystem::path current_path_;
     std::ofstream file_;
+#if !defined(_WIN32)
+    int fd_ = -1;
+#endif
     std::mutex mutex_;
 };
 
@@ -171,7 +204,16 @@ class SyncLogger {
 
 class AsyncLogger {
  public:
+    // 队列满时的溢出策略：Block=背压阻塞生产端（不丢行），Drop=直接丢弃新日志（不阻塞）。
+    enum class Overflow { Block, Drop };
+
+    struct Options {
+        std::size_t max_pending = 8192;      // 队列上限（待落盘行数）；0 表示无界。
+        Overflow overflow = Overflow::Block;  // 默认背压，优先保证不丢行。
+    };
+
     AsyncLogger() : worker_([this] { run(); }) {}
+    explicit AsyncLogger(Options options) : options_(options), worker_([this] { run(); }) {}
     ~AsyncLogger() { stop(); }
 
     void add_sink(std::shared_ptr<Sink> sink) {
@@ -180,11 +222,28 @@ class AsyncLogger {
     }
 
     void log(Level level, const char* file, int line, const std::string& message) {
+        // 先在锁外完成昂贵的格式化（timestamp→localtime_r+ostringstream），
+        // 临界区只保留“入队 + 计数”，避免所有生产端在格式化阶段互相串行。
+        std::string formatted = format(level, file, line, message);
         {
-            // 生产端只做“格式化 + 入队 + 计数”，把落盘 I/O 甩给后台线程，换取低入队延迟。
-            std::lock_guard<std::mutex> lock(mutex_);
-            current_.push_back(format(level, file, line, message));
+            std::unique_lock<std::mutex> lock(mutex_);
+            if (options_.max_pending != 0 && current_.size() >= options_.max_pending) {
+                if (options_.overflow == Overflow::Drop) {
+                    ++dropped_;  // 丢弃策略：队列已满则直接丢新日志，不阻塞热路径。
+                    return;
+                }
+                // 阻塞策略：等后台线程腾出空间再入队，代价是生产端被背压、但绝不丢行。
+                not_full_.wait(lock, [this] {
+                    return current_.size() < options_.max_pending || stopped_.load();
+                });
+                if (stopped_.load() && current_.size() >= options_.max_pending) {
+                    ++dropped_;  // 已在停机途中且仍满：只能丢弃，避免生产端永久阻塞。
+                    return;
+                }
+            }
+            current_.push_back(std::move(formatted));
             ++accepted_;
+            ++queued_;  // 原子队列深度：既供背压判断，也让 run() 循环条件无需在锁外读 current_。
         }
         cv_.notify_one();
     }
@@ -203,24 +262,33 @@ class AsyncLogger {
         bool expected = false;
         if (!stopped_.compare_exchange_strong(expected, true)) return;
         cv_.notify_one();
+        not_full_.notify_all();  // 唤醒可能因背压阻塞的生产端，避免停机时死等。
         if (worker_.joinable()) worker_.join();
     }
 
     std::size_t accepted() const { return accepted_.load(); }
     std::size_t written() const { return written_.load(); }
+    std::size_t dropped() const { return dropped_.load(); }
 
  private:
     void run() {
         std::vector<std::string> pending;
-        // 停止后仍要把 current_ 里剩余的日志排空再退出，否则关机时会丢尾部日志。
-        while (!stopped_.load() || !current_.empty()) {
+        // 停止后仍要把队列里剩余的日志排空再退出，否则关机时会丢尾部日志。
+        // 循环条件只读原子 stopped_/queued_，不再在锁外触碰 current_（消除数据竞争）。
+        while (!stopped_.load() || queued_.load() != 0) {
+            std::size_t swapped = 0;
             {
                 std::unique_lock<std::mutex> lock(mutex_);
-                cv_.wait_for(lock, std::chrono::milliseconds(20),
-                             [this] { return stopped_.load() || !current_.empty(); });
+                // 谓词在锁内求值：入队(log)与停止(stop)改变谓词后都会 notify，故无需超时轮询，
+                // 也不会丢唤醒。谓词只读 current_/stopped_，全程持锁，消除对 current_ 的竞争。
+                cv_.wait(lock, [this] { return stopped_.load() || !current_.empty(); });
                 current_.swap(
                     pending);  // 双缓冲：交换出整批日志，让生产端立刻能继续往空 current_ 写。
+                swapped = pending.size();
+                queued_.fetch_sub(swapped);  // 与 push 同在 mutex_ 下，队列深度保持精确。
             }
+            if (swapped > 0)
+                not_full_.notify_all();  // 腾出了队列空间，唤醒被背压阻塞的生产端。
             write_batch(pending);
             pending.clear();
         }
@@ -241,15 +309,21 @@ class AsyncLogger {
         for (auto& sink : sinks_) sink->flush();
     }
 
+    Options options_{};
     std::mutex mutex_;  // 保护 current_ 批次，与 sink_mutex_ 分离以缩短生产端持锁时间。
-    std::condition_variable cv_;
+    std::condition_variable cv_;        // 生产端 → 后台线程：有新日志可处理。
+    std::condition_variable not_full_;  // 后台线程 → 生产端：队列已腾出空间（背压）。
     std::vector<std::string> current_;
     std::mutex sink_mutex_;  // 独立锁保护 sink 列表，写盘期间不阻塞新日志入队。
     std::vector<std::shared_ptr<Sink>> sinks_;
-    std::thread worker_;
     std::atomic<bool> stopped_{false};
     std::atomic<std::size_t> accepted_{0};
     std::atomic<std::size_t> written_{0};
+    std::atomic<std::size_t> queued_{0};   // 当前待落盘行数（队列深度）。
+    std::atomic<std::size_t> dropped_{0};  // Drop 策略下累计丢弃的行数。
+    // worker_ 必须是最后一个成员：线程在构造时立即执行 run()，只有排在最后才能保证
+    // 上面所有状态（mutex_/atomics/current_ 等）都已初始化完毕，避免启动即数据竞争。
+    std::thread worker_;
 };
 
 class LogLine {

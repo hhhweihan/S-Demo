@@ -17,8 +17,10 @@ namespace mini_stl {
 
 enum class Color { Red, Black };
 
-template <typename Key, typename Value, typename Compare = std::less<Key>>
-class RBTree {  // 教学版红黑树：插入 + 修复，删除走整树重建（见 erase）。
+// Alloc 默认 std::allocator：老写法 RBTree<int,int> 仍能编译；传入 PoolAllocator 即走内存池。
+template <typename Key, typename Value, typename Compare = std::less<Key>,
+          typename Alloc = std::allocator<std::pair<const Key, Value>>>
+class RBTree {  // 红黑树：插入/删除均做标准旋转+变色修复（见 erase / fix_after_delete）。
  public:
     struct Node {
         Key key;
@@ -82,7 +84,7 @@ class RBTree {  // 教学版红黑树：插入 + 修复，删除走整树重建�
             }
         }
 
-        Node* node = new Node{key, value};
+        Node* node = create_node(key, value);  // 经 allocator_traits 分配+构造，不再裸 new。
         node->parent = parent;
         if (!parent) {
             root_ = node;
@@ -96,19 +98,46 @@ class RBTree {  // 教学版红黑树：插入 + 修复，删除走整树重建�
         return {iterator(node, this), true};
     }
 
-    // 教学版删除：不做标准的三情形指针改接，而是收集其余节点重新逐个插入。
-    // 正确但 O(n log n)，重点在“红黑性质由 insert 修复自然恢复”，牺牲效率换可读性。
+    // 标准红黑删除：先做 BST 删除（0/1 子直接改接，2 子用中序后继顶替），
+    // 若“真正移除的节点”是黑色则黑高被破坏，交给 fix_after_delete 消解双黑。
     bool erase(const Key& key) {
-        std::vector<std::pair<Key, Value>> entries;
-        bool removed = false;
-        collect_except(root_, key, entries, removed);  // 中序收集，跳过第一个匹配 key。
-        clear(root_);
-        root_ = nullptr;
-        size_ = 0;
-        for (const auto& entry : entries) {
-            insert(entry.first, entry.second);
+        Node* z = find_node(key);
+        if (!z) return false;  // 不存在则不算删除。
+        // y：实际从树中“物理下线”的节点；x：顶替 y 位置、可能承接一层额外黑的节点（可为空）。
+        Node* y = z;
+        Color y_original_color = y->color;
+        Node* x = nullptr;
+        Node* x_parent = nullptr;  // x 可能为空（叶下的 nil），故单独记录其父以定位修复起点。
+        if (!z->left) {
+            x = z->right;
+            x_parent = z->parent;
+            transplant(z, z->right);  // 无左子：右子（或空）直接顶上。
+        } else if (!z->right) {
+            x = z->left;
+            x_parent = z->parent;
+            transplant(z, z->left);  // 无右子：左子顶上。
+        } else {
+            y = minimum(z->right);  // 两子：取右子树最小者（中序后继）来顶替 z。
+            y_original_color = y->color;
+            x = y->right;  // y 无左子，其右子（或空）将接替 y 的位置。
+            if (y->parent == z) {
+                x_parent = y;  // y 就是 z 的右子：x 之父即 y（x 为空时也要能定位）。
+            } else {
+                x_parent = y->parent;
+                transplant(y, y->right);  // 先把 y 从深处摘出，其右子补位。
+                y->right = z->right;
+                y->right->parent = y;
+            }
+            transplant(z, y);  // y 顶替 z 的位置，并继承 z 的左子与颜色（颜色继承使 z 处黑高不变）。
+            y->left = z->left;
+            y->left->parent = y;
+            y->color = z->color;
         }
-        return removed;
+        destroy_node(z);  // 经 allocator_traits 析构+回收，不再裸 delete。
+        --size_;
+        if (y_original_color == Color::Black)
+            fix_after_delete(x, x_parent);  // 删掉的是黑节点才会破坏黑高，需修复。
+        return true;
     }
 
     Node* find_node(const Key& key) const {
@@ -148,6 +177,23 @@ class RBTree {  // 教学版红黑树：插入 + 修复，删除走整树重建�
     }
 
  private:
+    // 关键：节点式容器分配的是 Node 而非 Key/Value，故必须把外部 Alloc 重绑到 Node 类型。
+    // allocator_traits::rebind_alloc 正是为此而生——同一族 allocator 换个 value_type 复用其分配策略。
+    using NodeAlloc = typename std::allocator_traits<Alloc>::template rebind_alloc<Node>;
+    using NodeAllocTraits = std::allocator_traits<NodeAlloc>;
+
+    // 统一走 allocator_traits：allocate 拿裸内存，construct 就地构造 Node（含颜色/指针初值）。
+    Node* create_node(const Key& key, const Value& value) {
+        Node* node = NodeAllocTraits::allocate(node_alloc_, 1);
+        NodeAllocTraits::construct(node_alloc_, node, Node{key, value});
+        return node;
+    }
+    // 与 create_node 对称：先 destroy 调析构，再 deallocate 归还内存（池化时回收进空闲链）。
+    void destroy_node(Node* node) {
+        NodeAllocTraits::destroy(node_alloc_, node);
+        NodeAllocTraits::deallocate(node_alloc_, node, 1);
+    }
+
     static Color color_of(Node* node) {
         return node ? node->color : Color::Black;
     }  // 空节点视为黑（叶为黑的约定），省去大量空判。
@@ -239,6 +285,80 @@ class RBTree {  // 教学版红黑树：插入 + 修复，删除走整树重建�
             Color::Black);  // 情形 1 上推可能把根染红，统一收尾置黑（黑高对所有路径 +1，仍合法）。
     }
 
+    // 用子树 v 替换以 u 为根的子树在其父下的挂接（不动 u 自身的孩子指针）。v 可为空。
+    void transplant(Node* u, Node* v) {
+        if (!u->parent)
+            root_ = v;
+        else if (u == u->parent->left)
+            u->parent->left = v;
+        else
+            u->parent->right = v;
+        if (v) v->parent = u->parent;
+    }
+
+    // 删除修复：x 承接了一层“额外黑”（双黑）。沿兄弟 w 的颜色/孩子颜色分四情形把额外黑上推或消解。
+    // x 可能为空，故额外传入其父 parent 来定位；有效红黑树里双黑节点的兄弟必非空。
+    void fix_after_delete(Node* x, Node* parent) {
+        while (x != root_ && color_of(x) == Color::Black) {
+            if (x == parent->left) {
+                Node* w = parent->right;  // 兄弟。
+                if (color_of(w) == Color::Red) {
+                    // 情形 1：兄红。变色后左旋父，转化为兄黑的情形 2/3/4。
+                    set_color(w, Color::Black);
+                    set_color(parent, Color::Red);
+                    rotate_left(parent);
+                    w = parent->right;
+                }
+                if (color_of(w->left) == Color::Black && color_of(w->right) == Color::Black) {
+                    // 情形 2：兄黑且两侄皆黑。兄染红，把额外黑上移到父，继续向上处理。
+                    set_color(w, Color::Red);
+                    x = parent;
+                    parent = x->parent;
+                } else {
+                    if (color_of(w->right) == Color::Black) {
+                        // 情形 3：兄黑、近侄红远侄黑。变色后右旋兄，转成远侄红的情形 4。
+                        set_color(w->left, Color::Black);
+                        set_color(w, Color::Red);
+                        rotate_right(w);
+                        w = parent->right;
+                    }
+                    // 情形 4：兄黑且远侄红。兄继承父色、父与远侄转黑，左旋父，额外黑消解，收尾。
+                    set_color(w, color_of(parent));
+                    set_color(parent, Color::Black);
+                    set_color(w->right, Color::Black);
+                    rotate_left(parent);
+                    x = root_;  // 置 x=root 令循环终止。
+                }
+            } else {  // x 在右侧，下面为左右对称镜像。
+                Node* w = parent->left;
+                if (color_of(w) == Color::Red) {
+                    set_color(w, Color::Black);
+                    set_color(parent, Color::Red);
+                    rotate_right(parent);
+                    w = parent->left;
+                }
+                if (color_of(w->right) == Color::Black && color_of(w->left) == Color::Black) {
+                    set_color(w, Color::Red);
+                    x = parent;
+                    parent = x->parent;
+                } else {
+                    if (color_of(w->left) == Color::Black) {
+                        set_color(w->right, Color::Black);
+                        set_color(w, Color::Red);
+                        rotate_left(w);
+                        w = parent->left;
+                    }
+                    set_color(w, color_of(parent));
+                    set_color(parent, Color::Black);
+                    set_color(w->left, Color::Black);
+                    rotate_right(parent);
+                    x = root_;
+                }
+            }
+        }
+        set_color(x, Color::Black);  // 收尾：红节点顶替则染黑吸收额外黑；根多出的黑对全路径等价。
+    }
+
     // lower/upper_bound 合一：一路向左收窄候选。upper 用 key<cur、lower 用 !(cur<key)
     // 判断“可作候选”。
     Node* bound(const Key& key, bool upper) const {
@@ -303,30 +423,19 @@ class RBTree {  // 教学版红黑树：插入 + 修复，删除走整树重建�
         if (!node) return;
         clear(node->left);
         clear(node->right);
-        delete node;  // 后序释放：先子后父，避免访问已删指针。
-    }
-
-    void collect_except(Node* node, const Key& key, std::vector<std::pair<Key, Value>>& entries,
-                        bool& removed) const {
-        if (!node) return;
-        collect_except(node->left, key, entries, removed);  // 中序遍历使 entries 天然有序。
-        if (!removed && !compare_(key, node->key) && !compare_(node->key, key)) {
-            removed = true;  // 只跳过首个匹配 key（重建即等价于删一个）。
-        } else {
-            entries.push_back({node->key, node->value});
-        }
-        collect_except(node->right, key, entries, removed);
+        destroy_node(node);  // 后序释放：先子后父，避免访问已删指针。
     }
 
     Node* root_ = nullptr;
     std::size_t size_ = 0;
     Compare compare_{};
+    NodeAlloc node_alloc_{};  // 重绑到 Node 的 allocator 实例：所有节点分配/回收都经它。
 };
 
-template <typename Key, typename Compare = std::less<Key>>
+template <typename Key, typename Compare = std::less<Key>, typename Alloc = std::allocator<Key>>
 class MySet {  // RBTree 的薄封装：key 即 value 的有序唯一集合。
  public:
-    using Tree = RBTree<Key, Key, Compare>;
+    using Tree = RBTree<Key, Key, Compare, Alloc>;  // Alloc 透传给树，再由树重绑到 Node。
     class iterator {
      public:
         // Standard iterator typedefs so std::iterator_traits recognises this as an
@@ -364,10 +473,11 @@ class MySet {  // RBTree 的薄封装：key 即 value 的有序唯一集合。
     Tree tree_;
 };
 
-template <typename Key, typename Value, typename Compare = std::less<Key>>
+template <typename Key, typename Value, typename Compare = std::less<Key>,
+          typename Alloc = std::allocator<std::pair<const Key, Value>>>
 class MyMap {  // RBTree 封装的有序唯一键映射。
  public:
-    using Tree = RBTree<Key, Value, Compare>;
+    using Tree = RBTree<Key, Value, Compare, Alloc>;  // Alloc 透传给树，再由树重绑到 Node。
     Value& operator[](const Key& key) {
         // insert() upserts, so it would clobber an existing value with Value{}. Only default-
         // construct when the key is absent; otherwise return the existing slot untouched.
@@ -393,7 +503,7 @@ class MyMap {  // RBTree 封装的有序唯一键映射。
     Tree tree_;
 };
 
-template <typename Key, typename Compare = std::less<Key>>
+template <typename Key, typename Compare = std::less<Key>, typename Alloc = std::allocator<Key>>
 class MyMultiSet {  // 教学版：用有序 vector 而非树，突出“允许重复 key”这一点。
  public:
     void insert(const Key& key) {
@@ -408,11 +518,14 @@ class MyMultiSet {  // 教学版：用有序 vector 而非树，突出“允许�
     auto end() const { return values_.end(); }
 
  private:
-    std::vector<Key> values_;
+    // 底层是连续 vector，故把 Alloc 重绑到 Key（vector 的元素类型正是 Key）。
+    using KeyAlloc = typename std::allocator_traits<Alloc>::template rebind_alloc<Key>;
+    std::vector<Key, KeyAlloc> values_;
     Compare compare_{};
 };
 
-template <typename Key, typename Value, typename Compare = std::less<Key>>
+template <typename Key, typename Value, typename Compare = std::less<Key>,
+          typename Alloc = std::allocator<std::pair<Key, Value>>>
 class MyMultiMap {  // 教学版：vector 存 key/value，允许同 key 多值。
  public:
     void insert(const Key& key, const Value& value) {
@@ -430,7 +543,10 @@ class MyMultiMap {  // 教学版：vector 存 key/value，允许同 key 多值�
     }
 
  private:
-    std::vector<std::pair<Key, Value>> values_;
+    // vector 元素是 pair<Key,Value>，故把 Alloc 重绑到该 pair 类型。
+    using PairAlloc =
+        typename std::allocator_traits<Alloc>::template rebind_alloc<std::pair<Key, Value>>;
+    std::vector<std::pair<Key, Value>, PairAlloc> values_;
     Compare compare_{};
 };
 
@@ -438,7 +554,8 @@ template <typename Key, typename Value, typename Hash = std::hash<Key>,
           typename Equal = std::equal_to<Key>>
 class MyUnorderedMap {  // 开链哈希表：vector<list<pair>>，冲突挂链。
  public:
-    explicit MyUnorderedMap(std::size_t buckets = 8) : buckets_(buckets) {}
+    // 至少保留 1 个桶：bucket_index 用 hash % buckets_.size()，0 桶会触发除零 UB。
+    explicit MyUnorderedMap(std::size_t buckets = 8) : buckets_(buckets == 0 ? 1 : buckets) {}
     Value& operator[](const Key& key) {
         if ((size_ + 1.0) / buckets_.size() > max_load_factor_)
             rehash(buckets_.size() * 2);  // 插入前预判负载：超阈值先扩桶，避免链变长拖慢查找。
@@ -467,6 +584,7 @@ class MyUnorderedMap {  // 开链哈希表：vector<list<pair>>，冲突挂链�
         return false;
     }
     void rehash(std::size_t bucket_count) {
+        if (bucket_count == 0) bucket_count = 1;  // 同理禁止 0 桶，避免后续取模除零。
         // 桶数变了，所有条目的 index = hash % bucket_count 都要重算并迁移；move 避免深拷贝。
         std::vector<std::list<std::pair<Key, Value>>> next(bucket_count);
         for (auto& bucket : buckets_) {
@@ -514,17 +632,49 @@ bool binary_search(Iterator first, Iterator last, const T& value) {
     return std::binary_search(first, last, value);  // 前提：范围已按同一序有序。
 }
 
+// 定长块内存池 allocator：对单对象（count==1）分配走空闲链复用，避免频繁 new/delete；
+// count>1（如 vector 的连续数组）无法用定长块池化，回退 ::operator new/delete。
+// 空闲块原地内嵌 next 指针复用为链表节点，故仅当 sizeof(T) 足够容纳指针时才启用池化。
 template <typename T>
-class PoolAllocator {  // 最小 allocator：只需 value_type + allocate/deallocate，allocator_traits
-                       // 补齐其余。
+class PoolAllocator {
  public:
     using value_type = T;
     PoolAllocator() = default;
     template <typename U>
     PoolAllocator(const PoolAllocator<U>&) {
     }  // rebind 转换构造：容器要为内部节点类型重绑 allocator。
-    T* allocate(std::size_t count) { return static_cast<T*>(::operator new(sizeof(T) * count)); }
-    void deallocate(T* pointer, std::size_t) noexcept { ::operator delete(pointer); }
+
+    T* allocate(std::size_t count) {
+        if (count == 1 && kPoolable) {
+            if (FreeNode* node = free_list()) {  // 命中空闲链：弹出复用，省一次系统分配。
+                free_list() = node->next;
+                return reinterpret_cast<T*>(node);
+            }
+        }
+        return static_cast<T*>(::operator new(sizeof(T) * count));
+    }
+    void deallocate(T* pointer, std::size_t count) noexcept {
+        if (count == 1 && kPoolable) {  // 单对象归还空闲链而非交还系统，供后续复用。
+            FreeNode* node = reinterpret_cast<FreeNode*>(pointer);
+            node->next = free_list();
+            free_list() = node;
+            return;
+        }
+        ::operator delete(pointer);
+    }
+
+ private:
+    struct FreeNode {
+        FreeNode* next;
+    };
+    // 块须能内嵌 next 指针（大小与对齐都够）才可池化；int 等小类型退化为纯转发，保证安全。
+    static constexpr bool kPoolable =
+        sizeof(T) >= sizeof(FreeNode) && alignof(T) >= alignof(FreeNode);
+    // 每种 T 一条静态空闲链：实例本身无状态，任一实例都可释放另一实例分配的块（满足等价要求）。
+    static FreeNode*& free_list() {
+        static FreeNode* head = nullptr;
+        return head;
+    }
 };
 
 // 所有实例视为等价 → 任一 PoolAllocator 分配的内存可被另一实例释放（无状态 allocator 的要求）。

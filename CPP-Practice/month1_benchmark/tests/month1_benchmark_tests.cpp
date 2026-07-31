@@ -133,3 +133,143 @@ TEST(SharedPtr, MoveAssignReleasesTargetThenTakesSource) {
     EXPECT_EQ(b.use_count(), 1);
     EXPECT_EQ(a.get(), nullptr);
 }
+
+// ---------------------------------------------------------------------------
+// WeakPtr: 观察者不拥有对象，只是弱引用；用来打破循环引用。
+// ---------------------------------------------------------------------------
+
+TEST(WeakPtr, DoesNotExtendObjectLifetime) {
+    Tracked::alive = 0;
+    WeakPtr<Tracked> weak;
+    {
+        SharedPtr<Tracked> owner(new Tracked(11));
+        weak = WeakPtr<Tracked>(owner);
+        // A weak ref must never bump the strong count.
+        EXPECT_EQ(owner.use_count(), 1);
+        EXPECT_EQ(weak.use_count(), 1);
+        EXPECT_FALSE(weak.expired());
+        EXPECT_EQ(Tracked::alive, 1);
+    }
+    // Object dies with the last SharedPtr, even though a WeakPtr still points at it.
+    EXPECT_EQ(Tracked::alive, 0);
+    EXPECT_TRUE(weak.expired());
+    EXPECT_EQ(weak.use_count(), 0);
+}
+
+TEST(WeakPtr, ExpiredAndLockAfterStrongCountHitsZero) {
+    Tracked::alive = 0;
+    WeakPtr<Tracked> weak;
+    {
+        SharedPtr<Tracked> owner(new Tracked(22));
+        weak = WeakPtr<Tracked>(owner);
+
+        // While the object is alive, lock() yields a valid, sharing SharedPtr.
+        SharedPtr<Tracked> locked = weak.lock();
+        ASSERT_TRUE(static_cast<bool>(locked));
+        EXPECT_EQ(locked->value, 22);
+        EXPECT_EQ(owner.use_count(), 2);  // owner + locked
+    }
+    // After every strong reference is gone the weak ref is expired.
+    EXPECT_TRUE(weak.expired());
+    SharedPtr<Tracked> revived = weak.lock();
+    EXPECT_EQ(revived.get(), nullptr);
+    EXPECT_EQ(revived.use_count(), 0);
+    EXPECT_EQ(Tracked::alive, 0);
+}
+
+TEST(WeakPtr, ControlBlockOutlivesObject) {
+    // Two-phase lifetime: the object is destroyed at strong==0, but the control
+    // block must survive so a lingering WeakPtr can safely report expired().
+    Tracked::alive = 0;
+    WeakPtr<Tracked> weak;
+    {
+        SharedPtr<Tracked> owner(new Tracked(33));
+        weak = WeakPtr<Tracked>(owner);
+    }
+    // Object gone; querying through the still-alive weak ref must not touch freed memory.
+    EXPECT_EQ(Tracked::alive, 0);
+    EXPECT_TRUE(weak.expired());
+    EXPECT_EQ(weak.use_count(), 0);
+    weak.reset();  // Dropping the last weak ref now frees the control block.
+    EXPECT_TRUE(weak.expired());
+}
+
+// ---------------------------------------------------------------------------
+// 循环引用：全用 SharedPtr 会泄漏，把一条边换成 WeakPtr 即可正常析构。
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A node that counts destructions so we can prove a cycle actually gets freed.
+struct Node {
+    static int destroyed;
+    SharedPtr<Node> strong_next;  // strong edge
+    WeakPtr<Node> weak_next;      // weak edge (breaks the cycle)
+    ~Node() { ++destroyed; }
+};
+int Node::destroyed = 0;
+
+}  // namespace
+
+TEST(WeakPtr, BreaksReferenceCycleSoObjectsAreDestroyed) {
+    Node::destroyed = 0;
+    {
+        SharedPtr<Node> a(new Node());
+        SharedPtr<Node> b(new Node());
+        // a -> b via a strong edge; b -> a via a weak edge.
+        a->strong_next = b;
+        b->weak_next = WeakPtr<Node>(a);
+
+        EXPECT_EQ(a.use_count(), 1);  // only the local `a` counts, weak edge does not
+        EXPECT_EQ(b.use_count(), 2);  // local `b` + a->strong_next
+    }
+    // Both nodes must be reclaimed: no leak thanks to the weak edge.
+    EXPECT_EQ(Node::destroyed, 2);
+}
+
+// ---------------------------------------------------------------------------
+// EnableSharedFromThis: 对象自身交出的 SharedPtr 必须共享同一控制块。
+// ---------------------------------------------------------------------------
+
+namespace {
+
+struct Widget : EnableSharedFromThis<Widget> {
+    static int alive;
+    int value;
+    explicit Widget(int v = 0) : value(v) { ++alive; }
+    ~Widget() { --alive; }
+};
+int Widget::alive = 0;
+
+}  // namespace
+
+TEST(EnableSharedFromThis, SharesSameControlBlock) {
+    Widget::alive = 0;
+    {
+        SharedPtr<Widget> owner(new Widget(99));
+        EXPECT_EQ(owner.use_count(), 1);
+
+        SharedPtr<Widget> self = owner->shared_from_this();
+        // shared_from_this must reuse the existing control block, not make a new one.
+        ASSERT_TRUE(static_cast<bool>(self));
+        EXPECT_EQ(self.get(), owner.get());
+        EXPECT_EQ(owner.use_count(), 2);
+        EXPECT_EQ(self.use_count(), 2);
+        EXPECT_EQ(self->value, 99);
+    }
+    // Exactly one object, destroyed exactly once (no double-free from two blocks).
+    EXPECT_EQ(Widget::alive, 0);
+}
+
+TEST(EnableSharedFromThis, WeakFromThisTracksLifetime) {
+    Widget::alive = 0;
+    WeakPtr<Widget> weak;
+    {
+        SharedPtr<Widget> owner(new Widget(7));
+        weak = owner->weak_from_this();
+        EXPECT_FALSE(weak.expired());
+        EXPECT_EQ(weak.lock().get(), owner.get());
+    }
+    EXPECT_TRUE(weak.expired());
+    EXPECT_EQ(Widget::alive, 0);
+}

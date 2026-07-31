@@ -304,6 +304,41 @@ TEST(RaftProd, ReadIndexReturnsCommittedValue) {
     }
 }
 
+// A linearizable read after a full reboot, across a snapshot, must return the latest durable value
+// — including entries committed AFTER the snapshot boundary. On reboot the leader's commitIndex
+// resumes at lastIncludedIndex (the snapshot point), so the post-snapshot suffix reloaded from disk
+// is not yet re-applied; the ReadIndex gate (readReady requires commitIndex >= this term's no-op
+// index) makes the read wait until the fresh leader re-commits that suffix before answering, so it
+// never reads a stale pre-suffix state machine. Without the current-term-commit gate a ReadIndex
+// keyed only on the stale commitIndex could be served the moment leadership is confirmed.
+TEST(RaftProd, ReadIndexReturnsPostSnapshotValueAfterReboot) {
+    Config cfg;
+    cfg.snapshotThreshold = 5;  // force a snapshot so commitIndex reloads mid-log, not at -1
+    const std::filesystem::path dir = freshDir("readgate");
+    const StorageFactory factory = fileFactory(dir);
+    {
+        Cluster cluster(3, /*seed=*/7, cfg, factory);
+        ASSERT_TRUE(cluster.runUntil([&] { return cluster.currentLeader() >= 0; }, 3000));
+        for (int i = 0; i < 12; ++i) {
+            int idx = cluster.submit("put", "k" + std::to_string(i), "v" + std::to_string(i));
+            ASSERT_GE(idx, 0);
+            ASSERT_TRUE(cluster.runUntil([&] { return cluster.isCommitted(idx); }, 3000));
+        }
+        // A final write that lands beyond the last snapshot boundary (so it lives only in the
+        // reloaded log suffix after reboot, not in the snapshot image).
+        int idx = cluster.submit("put", "special", "target");
+        ASSERT_GE(idx, 0);
+        ASSERT_TRUE(cluster.runUntil([&] { return cluster.isCommitted(idx); }, 3000));
+    }
+
+    Cluster rebooted(3, /*seed=*/99, cfg, factory);
+    ASSERT_TRUE(rebooted.runUntil([&] { return rebooted.currentLeader() >= 0; }, 3000));
+    int leader = rebooted.currentLeader();
+    EXPECT_EQ(rebooted.linearizableGet(leader, "special", 3000),
+              std::optional<std::string>("target"))
+        << "linearizable read missed a post-snapshot committed value after reboot";
+}
+
 // A stale (partitioned) leader must NOT serve a linearizable read: it cannot confirm leadership
 // with a heartbeat majority, so ReadIndex reports unavailable rather than returning old data.
 TEST(RaftProd, StaleLeaderCannotServeLinearizableRead) {

@@ -13,13 +13,13 @@
 - [x] 编号 338：快照 + 日志压缩 + InstallSnapshot —— snapshot-aware 索引偏移、落后 follower 追赶
 - [x] 编号 339：ReadIndex 线性一致读 —— 记 readIndex → 不同节点多数派确认 → 等 apply 追上
 - [x] 编号 340：Pre-Vote —— 分区节点重连不抬 term、不扰动在任 Leader，且不牺牲崩溃后活性
-- [x] 编号 341：生产化测试范式 —— 确定性仿真 + 每步不变量，6 个 RaftProd 用例，成员变更推迟说明
+- [x] 编号 341：生产化测试范式 —— 确定性仿真 + 每步不变量，7 个 RaftProd 用例，成员变更推迟说明
 
 ## 本阶段产出
 
 - 代码：`CPP-Practice/raft_kv/raft_storage.h`（Storage 抽象 + MemStorage/FileStorage + CRC 序列化）
   + 改造的 `raft_sim.h`（真持久化、snapshot/InstallSnapshot、ReadIndex、Pre-Vote、snapshot-aware 索引）
-- 测试：`CPP-Practice/raft_kv/tests/raft_chaos_tests.cpp`（5 个既有 chaos 保绿 + 6 个 RaftProd 新增）
+- 测试：`CPP-Practice/raft_kv/tests/raft_chaos_tests.cpp`（5 个既有 chaos 保绿 + 7 个 RaftProd 新增）
 - `mini_raft_kv.h` 降级为文档标注的上帝视角教学基线；测试 target 只依赖 `raft_sim.h`
 
 ## 阶段小结
@@ -45,7 +45,7 @@ Pre-Vote 用一轮不递增 term 的预投票拦住分区回归节点，避免�
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --target raft_kv_tests -j
-ctest --test-dir build -R raft_kv --output-on-failure    # 11 个用例（5 chaos + 6 prod）
+ctest --test-dir build -R raft_kv --output-on-failure    # 12 个用例（5 chaos + 7 prod）
 
 # ASan/UBSan（序列化/反序列化的缓冲算术 + snapshot 索引换算是风险点）
 cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DS_DEMO_SANITIZER=address

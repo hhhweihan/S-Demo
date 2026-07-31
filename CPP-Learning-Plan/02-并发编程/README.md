@@ -17,7 +17,7 @@
 │   ├── 支持 future 返回
 │   └── 动态扩缩容
 ├── 无锁数据结构        ← 阶段 7
-│   ├── LockFreeStack（单线程）
+│   ├── LockFreeStack（Treiber，多线程无锁）
 │   └── SPSCQueue（无锁，单生产者单消费者）
 └── 高级同步原语        ← 阶段 8
     ├── RWMutex（读写锁）

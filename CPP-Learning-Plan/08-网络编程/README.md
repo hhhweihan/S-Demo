@@ -5,6 +5,20 @@
 从 Socket 基础到 Reactor 框架，实现一个能承受 5000 QPS 的 HTTP Server。
 为后续 RPC 和 Raft KV 提供网络层基础。
 
+## 实现口径（真实落地 vs 跨平台模拟）
+
+本模块提交进 `CPP-Practice/network_reactor/` 的是一套**便携 Reactor 核**（`mini_reactor.h`：Buffer 长度前缀拆包 + Channel + FakePoller 内存事件分发 + 单线程 EventLoop），并非真实 POSIX socket 或 `epoll_wait`。各日 `[x]` 记录的是 socket / select / epoll(LT/ET) / timerfd 的**概念与设计掌握**；阻塞、非阻塞、select、epoll 原生 echo server 在本模块为概念研究，尚未提交原生实现。
+
+下一步 Linux 补课（原生实现待办）：
+
+- [ ] 原生阻塞 / 非阻塞 socket echo server（socket/bind/listen/accept + `fcntl(O_NONBLOCK)`）
+- [ ] `select(2)` 多路复用 echo server
+- [ ] 真实 `epoll_create1` / `epoll_ctl` / `epoll_wait` 的 LT 与 ET echo server
+- [ ] `timerfd_create` 定时器集成进 epoll 事件循环
+- [ ] wrk/ab 压测（QPS > 5000）与 ASan/TSan（Linux/WSL2）
+
+> 想看真实 epoll + timerfd 落地，见 `CPP-Practice/raft_kv/net/`（`event_loop.h` 真实 `epoll_create1`/`epoll_ctl`/`epoll_wait` LT 模式 + `timerfd`，`raft_server.h` 为其上层服务）。
+
 ## 技能树
 
 ```

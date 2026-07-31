@@ -57,6 +57,19 @@ static_assert(tr::is_constructible<std::string, const char*>::value);
 static_assert(!tr::is_constructible<int, std::string>::value);
 static_assert(tr::is_convertible<int, double>::value);
 static_assert(!tr::is_convertible<std::string, int>::value);
+// void 组合：仅 (cv)void -> (cv)void 为真，含 void 的混合组合为假（贴合标准）。
+static_assert(tr::is_convertible<void, void>::value);
+static_assert(tr::is_convertible<const void, volatile void>::value);
+static_assert(!tr::is_convertible<int, void>::value);
+static_assert(!tr::is_convertible<void, int>::value);
+static_assert(tr::is_void<const void>::value);
+static_assert(!tr::is_void<int>::value);
+
+// _v 变量模板与对应 trait::value 等价。
+static_assert(tr::is_same_v<int, int> && !tr::is_same_v<int, long>);
+static_assert(tr::is_convertible_v<int, double> && tr::is_void_v<void>);
+static_assert(tr::is_integral_v<long> && !tr::is_integral_v<double>);
+static_assert(tr::is_constructible_v<std::string, const char*>);
 
 // invoke_result
 static_assert(tr::is_same<tr::invoke_result_t<int (*)(double), double>, int>::value);

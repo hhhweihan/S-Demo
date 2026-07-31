@@ -5,7 +5,18 @@
 基于 `ucontext_t` 实现有栈协程（Fiber），构建协程调度器、Channel 通信、
 并将协程与网络 IO 整合（协程式异步编程）。
 
-> 当前 Windows/MSVC 环境不提供 POSIX `ucontext_t`，本模块代码采用标准 C++20 coroutine 完成无栈协程教学实现；ucontext 有栈协程与 epoll hook 保留为 Linux/POSIX 专项。
+## 实现口径（真实落地 vs 跨平台模拟）
+
+本模块提交进 `CPP-Practice/coroutine_lib/`（`mini_coroutine.h`）的是 **C++20 无栈协程**：`Task` + `promise_type` + **单线程 FIFO** `Scheduler` + `Channel`。这里没有 `ucontext_t` 有栈协程，也没有多线程工作窃取调度器——它们是设计/概念内容。各日 `[x]` 记录的是协程对象、调度、Channel 通信的**概念与设计掌握**。（当前 Windows/MSVC 环境不提供 POSIX `ucontext_t`，故底层 fiber 与 epoll hook 留待 Linux/POSIX 专项。）
+
+下一步 Linux 补课（原生实现待办）：
+
+- [ ] `ucontext_t` 有栈协程 Fiber（栈分配/管理 + 上下文切换）
+- [ ] 多线程工作窃取调度器（每线程本地 deque + steal from back）
+- [ ] 协程 hook 系统调用（read/write/sleep）+ 协程式 epoll 等待
+- [ ] 10 万有栈协程并发 / 协程切换开销 benchmark
+
+> 想看真实 epoll + timerfd 事件循环落地，见 `CPP-Practice/raft_kv/net/`（`event_loop.h` 真实 `epoll_create1`/`epoll_wait` LT 模式 + `timerfd`）。
 
 ## 技能树
 

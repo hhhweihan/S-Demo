@@ -37,8 +37,8 @@
 
 - [ ] `FixedAllocator<int>` 比 `new int` 快 3x 以上
 - [ ] `PoolAllocator` 能作为 `std::vector` 的 allocator 使用
-- [ ] 手写 `shared_ptr` 能正确处理循环引用（valgrind 无泄漏）
-- [ ] ASan 扫描本模块所有代码无报错
+- [x] 手写 `shared_ptr` 能正确处理循环引用（`WeakPtr` 打破环 + `EnableSharedFromThis`；ASan/LSan 实跑无泄漏，见 `month1_benchmark/tests` 的循环引用析构计数用例）
+- [x] ASan 扫描本模块所有代码无报错（CI `asan-ubsan` job 全绿）
 
 ## 参考资料
 

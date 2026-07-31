@@ -5,6 +5,20 @@
 在 模块 08 Reactor 框架基础上，实现连接池、io_uring 异步 IO、
 定时器轮（Timer Wheel）、以及完整的高性能 TCP 服务端框架。
 
+## 实现口径（真实落地 vs 跨平台模拟）
+
+本模块提交进 `CPP-Practice/high_perf_net/`（`mini_high_perf_net.h`）的是：`TimerWheel`（真实进程内 O(1) 增删/刷新/取消定时轮）、`IoUringSimulator`（在**用户态模拟** SQ/CQ 环，无 liburing、无真实 io_uring 系统调用）、以及进程内 `ConnectionPool` + `RoundRobinBalancer`/`LeastConnBalancer`（后端为进程内 `Backend` 对象，**非真实 TCP 连接/握手**）。各日 `[x]` 记录的是这些机制的**概念与设计掌握**；`sendfile`/`splice`/`SO_REUSEPORT`/固定缓冲区/SQPOLL 在本模块为概念研究。
+
+下一步 Linux 补课（原生实现待办）：
+
+- [ ] 原生 io_uring（liburing）：SQE/CQE 提交、TCP echo server、`register_buffers` 固定缓冲、SQPOLL
+- [ ] `sendfile(2)` / `splice` 零拷贝与双向 TCP 代理
+- [ ] `SO_REUSEPORT` 多线程 accept
+- [ ] 真实 TCP 连接池 + 面向真实后端的负载均衡 / 健康探测 / 熔断
+- [ ] 单机 QPS / 10 万并发压测（Linux/WSL2）
+
+> 想看真实 epoll + timerfd 落地，见 `CPP-Practice/raft_kv/net/`（`event_loop.h` 真实 `epoll_create1`/`epoll_wait` LT 模式 + `timerfd`）。
+
 ## 技能树
 
 ```

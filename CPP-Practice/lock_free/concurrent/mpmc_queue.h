@@ -105,7 +105,10 @@ class MPMCQueue {
     // std::hardware_destructive_interference_size。
     static constexpr std::size_t kCacheLineMPMC = 64;
 
-    struct Cell {
+    // 每个 Cell 独占一条 cache line（对齐 + 填充），避免相邻槽位的 sequence/data 落在同一 line 上
+    // 造成 false sharing——Vyukov 原版即如此隔离。理由同上，用本地常量避开
+    // std::hardware_destructive_interference_size。
+    struct alignas(kCacheLineMPMC) Cell {
         std::atomic<std::size_t> sequence;
         T data;
     };

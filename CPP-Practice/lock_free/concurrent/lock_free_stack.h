@@ -115,9 +115,14 @@ class ReclaimingLockFreeStack {
 
     void push(T value) {
         Node* new_node = new Node(std::move(value));
-        new_node->next = head_.load(std::memory_order_relaxed);
-        while (!head_.compare_exchange_weak(new_node->next, new_node, std::memory_order_release,
+        // next 是原子字段：并发 pop 里 CAS 重试会读它、try_reclaim 挂待删链会写它，二者若非原子
+        // 就是同址读写的数据竞争（标准 UB，TSan 会报）。这里用局部 current 承接 CAS 的 expected，
+        // 再把 next 原子发布，避免把 atomic 成员直接当 CAS 引用参数。
+        Node* current = head_.load(std::memory_order_relaxed);
+        new_node->next.store(current, std::memory_order_relaxed);
+        while (!head_.compare_exchange_weak(current, new_node, std::memory_order_release,
                                             std::memory_order_relaxed)) {
+            new_node->next.store(current, std::memory_order_relaxed);
         }
     }
 
@@ -127,8 +132,8 @@ class ReclaimingLockFreeStack {
 
         Node* old_head = head_.load(std::memory_order_acquire);
         while (old_head != nullptr &&
-               !head_.compare_exchange_weak(old_head, old_head->next, std::memory_order_acq_rel,
-                                            std::memory_order_acquire)) {
+               !head_.compare_exchange_weak(old_head, old_head->next.load(std::memory_order_acquire),
+                                            std::memory_order_acq_rel, std::memory_order_acquire)) {
         }
 
         std::shared_ptr<T> result;
@@ -148,29 +153,31 @@ class ReclaimingLockFreeStack {
         explicit Node(T value) : data(std::make_shared<T>(std::move(value))) {}
 
         std::shared_ptr<T> data;
-        Node* next = nullptr;
+        std::atomic<Node*> next{nullptr};  // 原子：并发 pop 的 CAS 重试与挂待删链会同址读写它
     };
 
     static void delete_nodes(Node* nodes) {
         while (nodes != nullptr) {
-            Node* next = nodes->next;
+            Node* next = nodes->next.load(std::memory_order_relaxed);
             delete nodes;
             nodes = next;
         }
     }
 
     void chain_pending_nodes(Node* first, Node* last) {
-        last->next = to_be_deleted_.load(std::memory_order_relaxed);
+        Node* old = to_be_deleted_.load(std::memory_order_relaxed);
+        last->next.store(old, std::memory_order_relaxed);
         // 把 [first..last] 整段无锁地接到 to_be_deleted_ 头部；release 发布链表内容。
-        while (!to_be_deleted_.compare_exchange_weak(last->next, first, std::memory_order_release,
+        while (!to_be_deleted_.compare_exchange_weak(old, first, std::memory_order_release,
                                                      std::memory_order_relaxed)) {
+            last->next.store(old, std::memory_order_relaxed);
         }
     }
 
     void chain_pending_nodes(Node* nodes) {
         Node* last = nodes;
-        while (last != nullptr && last->next != nullptr) {
-            last = last->next;
+        while (last != nullptr && last->next.load(std::memory_order_relaxed) != nullptr) {
+            last = last->next.load(std::memory_order_relaxed);
         }
         if (nodes != nullptr && last != nullptr) {
             chain_pending_nodes(nodes, last);
@@ -280,6 +287,27 @@ class TaggedPointerStack {
 
     // Head 必须可平凡拷贝，std::atomic<Head> 才能对其做无锁 CAS（否则退化为带锁）。
     static_assert(std::is_trivially_copyable<Head>::value, "Head must be trivially copyable");
+
+    // “无锁”声明的编译期强制：Head = {Node*, size_t} 共 16 字节，其 CAS 依赖硬件双字 CAS
+    // （x86-64 上是 CMPXCHG16B，CMakeLists 已加 -mcx16 + libatomic）。若无此支持，std::atomic<Head>
+    // 会静默退化为 libatomic 的互斥锁实现，“无锁栈”名不副实——此处编译失败以杜绝静默降级。
+    //
+    // 为何不能只写 static_assert(is_always_lock_free)：GCC 对 16B 原子的 is_always_lock_free /
+    // is_lock_free() **恒为 false**（本环境已验证），这是它对“无锁 load 需 CMPXCHG16B 写回、在只读
+    // 页上不安全”的保守处理，并非真的退化为带锁——开了 -mcx16 后 CAS 实际走 libatomic 的 cx16
+    // ifunc（cmpxchg16b，无互斥）。GCC 用 __GCC_HAVE_SYNC_COMPARE_AND_SWAP_16 精确表达“目标具备硬件
+    // 双字 CAS”，该宏仅在 -mcx16 时定义，正是我们要的“未退化为锁”的可靠信号。故：is_always_lock_free
+    // 为真（如 clang/MSVC）直接通过；GCC 则认这个硬件宏。两者皆无 ⇒ 确为带锁降级 ⇒ 编译失败。
+    static constexpr bool kHeadIsLockFree =
+        std::atomic<Head>::is_always_lock_free
+#if defined(__GNUC__) && !defined(__clang__) && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16)
+        || true  // GCC + 硬件 cmpxchg16b：真无锁，只是 is_always_lock_free 误报为 false
+#endif
+        ;
+    static_assert(kHeadIsLockFree,
+                  "TaggedPointerStack requires a lock-free double-word CAS for std::atomic<Head>; "
+                  "enable -mcx16 (x86-64), otherwise it degrades to a libatomic lock and the "
+                  "\"lock-free\" claim is false");
 
     void retire_node(Node* node) {
         std::lock_guard<std::mutex> lock(retired_mutex_);

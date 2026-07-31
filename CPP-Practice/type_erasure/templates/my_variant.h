@@ -66,7 +66,9 @@ class Variant {
         }
     }
 
-    Variant(Variant&& other) noexcept {
+    // noexcept 随全体 alternative 的移动构造而定：任一 Ts 移动可能抛,则本移动构造不再声明 noexcept,
+    // 否则 move_from 里 placement-new Ts(std::move(...)) 抛出会逃逸 noexcept 触发 std::terminate。
+    Variant(Variant&& other) noexcept((std::is_nothrow_move_constructible_v<Ts> && ...)) {
         if (!other.valueless_by_exception()) {
             move_from(std::move(other));
             other.reset();
@@ -84,7 +86,7 @@ class Variant {
         return *this;
     }
 
-    Variant& operator=(Variant&& other) noexcept {
+    Variant& operator=(Variant&& other) noexcept((std::is_nothrow_move_constructible_v<Ts> && ...)) {
         if (this == &other) {
             return *this;
         }

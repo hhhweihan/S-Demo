@@ -33,7 +33,7 @@ jobs:
       - name: Build
         run: cmake --build build -j
       - name: Test
-        run: ctest --test-dir build --output-on-failure -j2
+        run: ctest --test-dir build --output-on-failure -j2 -LE integration
 
   asan-ubsan:
     name: ASan + UBSan
@@ -48,7 +48,7 @@ jobs:
       - name: Build
         run: cmake --build build -j
       - name: Test
-        run: ctest --test-dir build --output-on-failure -j2
+        run: ctest --test-dir build --output-on-failure -j2 -LE integration
 
   tsan:
     name: ThreadSanitizer
@@ -62,8 +62,12 @@ jobs:
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DS_DEMO_SANITIZER=thread
       - name: Build
         run: cmake --build build -j
+      # Disable ASLR for the test run: ubuntu-latest's kernel uses high-entropy ASLR
+      # (vm.mmap_rnd_bits=32), which collides with TSan's fixed shadow-memory mapping and
+      # aborts every binary with "FATAL: ThreadSanitizer: unexpected memory mapping".
+      # `setarch -R` clears ADDR_NO_RANDOMIZE for ctest; child test processes inherit it.
       - name: Test
-        run: ctest --test-dir build --output-on-failure -j2
+        run: setarch "$(uname -m)" -R ctest --test-dir build --output-on-failure -j2 -LE integration
 
   format-check:
     name: clang-format

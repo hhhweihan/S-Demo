@@ -17,6 +17,22 @@ namespace er = demo::erasure;
 // Variant type<->index mapping is a compile-time computation.
 static_assert(er::variant_npos == static_cast<std::size_t>(-1));
 
+// 带可能抛出的移动构造的类型：用来验证 Variant 的移动 noexcept 会随 alternative 而定。
+struct ThrowingMove {
+    ThrowingMove() = default;
+    ThrowingMove(const ThrowingMove&) = default;
+    ThrowingMove(ThrowingMove&&) noexcept(false) {}  // 移动可能抛。
+    ThrowingMove& operator=(const ThrowingMove&) = default;
+    ThrowingMove& operator=(ThrowingMove&&) noexcept(false) { return *this; }
+};
+
+// 回归：Variant 的移动构造/赋值曾被无条件标 noexcept,可能抛的 alternative 会致 std::terminate。
+// 现在应随 (is_nothrow_move_constructible_v<Ts> && ...) 反映实际 alternative。
+static_assert(std::is_nothrow_move_constructible_v<er::Variant<int, std::string>>);
+static_assert(!std::is_nothrow_move_constructible_v<er::Variant<int, ThrowingMove>>);
+static_assert(std::is_nothrow_move_assignable_v<er::Variant<int, std::string>>);
+static_assert(!std::is_nothrow_move_assignable_v<er::Variant<int, ThrowingMove>>);
+
 TEST(Optional, StartsEmpty) {
     er::Optional<int> o;
     EXPECT_FALSE(o.has_value());
@@ -47,6 +63,22 @@ TEST(Optional, MoveLeavesSourceEmpty) {
     EXPECT_TRUE(dst.has_value());
     EXPECT_EQ(dst.value(), "data");
     EXPECT_FALSE(src.has_value());  // move construction resets the source.
+}
+
+// 回归：ptr() 现经 std::launder 访问 placement-new 的对象；基础往返读写须行为不变。
+TEST(Optional, RoundTripAccessAfterLaunder) {
+    er::Optional<std::string> o(std::string("value"));
+    EXPECT_TRUE(o.has_value());
+    EXPECT_EQ(o.value(), "value");
+    o.value() += "_x";
+    EXPECT_EQ(o.value(), "value_x");
+    EXPECT_EQ(o.value_or("fallback"), "value_x");
+
+    er::Optional<int> n(41);
+    n = 42;  // 已有值走赋值路径。
+    EXPECT_EQ(n.value(), 42);
+    n.reset();
+    EXPECT_EQ(n.value_or(7), 7);
 }
 
 TEST(Variant, IndexAndGetByTypeAndIndex) {

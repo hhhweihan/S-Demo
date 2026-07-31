@@ -364,3 +364,30 @@ TEST_F(TempDir, Kill9DurabilityAckedWritesSurvive) {
         EXPECT_EQ(*got, "v" + std::to_string(i));
     }
 }
+
+// Flush 后立即"猝死"：子进程写入、Flush（数据落 SSTable + 目录项 fsync + 轮转 WAL）后 _exit(0)。
+// 父进程重开库 Recover，断言已 flush 的数据全部幸存——覆盖 "SSTable 落盘 → 目录项落盘 → 截断 WAL"
+// 的持久化次序：若 Flush 在轮转 WAL 前未 fsync 目录，崩溃后目录项可能不 durable，整批数据将丢失。
+TEST_F(TempDir, FlushDurabilitySurvivesCrashRightAfterFlush) {
+    constexpr int kEntries = 30;
+    const pid_t pid = fork();
+    ASSERT_NE(pid, -1);
+    if (pid == 0) {
+        MiniDB db(dir_);
+        for (int i = 0; i < kEntries; ++i) {
+            db.Put("f" + std::to_string(i), "val" + std::to_string(i));
+        }
+        db.Flush();  // MemTable → L0 SSTable，随后轮转 WAL
+        _exit(0);    // Flush 返回后立即猝死：数据只能靠已 durable 的 SSTable + 目录项存活
+    }
+    int status = 0;
+    ASSERT_EQ(::waitpid(pid, &status, 0), pid);
+
+    MiniDB reopened(dir_);
+    reopened.Recover();
+    for (int i = 0; i < kEntries; ++i) {
+        auto got = reopened.Get("f" + std::to_string(i));
+        ASSERT_TRUE(got.has_value()) << "lost flushed key f" << i;
+        EXPECT_EQ(*got, "val" + std::to_string(i));
+    }
+}

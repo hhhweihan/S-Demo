@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -250,6 +251,146 @@ TEST(HazardStack, ConcurrentPushPopLosesNothing) {
 
     int value = 0;
     while (stack.pop(value)) {  // 排空剩余，使总量覆盖每个元素恰好一次
+        popped_sum.fetch_add(value, std::memory_order_relaxed);
+        popped_count.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    EXPECT_EQ(popped_count.load(), kTotal);
+    constexpr std::int64_t kExpectedSum = static_cast<std::int64_t>(kTotal - 1) * kTotal / 2;
+    EXPECT_EQ(popped_sum.load(), kExpectedSum);
+    EXPECT_TRUE(stack.empty());
+}
+
+// ------------------------------- ReclaimingLockFreeStack -------------------------------
+
+TEST(ReclaimingLockFreeStack, PreservesLifoOrder) {
+    ReclaimingLockFreeStack<int> stack;
+    EXPECT_TRUE(stack.empty());
+    for (int i = 0; i < 5; ++i) {
+        stack.push(i);
+    }
+    for (int i = 4; i >= 0; --i) {
+        std::shared_ptr<int> value = stack.pop();
+        ASSERT_TRUE(value != nullptr);
+        EXPECT_EQ(*value, i);
+    }
+    EXPECT_TRUE(stack.empty());
+    EXPECT_TRUE(stack.pop() == nullptr);
+}
+
+TEST(ReclaimingLockFreeStack, ConcurrentPushPopLosesNothing) {
+    // ASan/TSan 目标：threads_in_pop_ + to_be_deleted_ 的“独占 pop 才回收”路径在多线程 churn
+    // 下既不悬垂也不丢/重元素。每个 push 的值恰好被 pop 一次，校验和与计数守恒。
+    constexpr int kThreads = 8;
+    constexpr int kPerThread = 100'000;
+    constexpr int kTotal = kThreads * kPerThread;
+
+    ReclaimingLockFreeStack<int> stack;
+    std::atomic<std::int64_t> popped_sum{0};
+    std::atomic<int> popped_count{0};
+
+    std::vector<std::thread> workers;
+    for (int t = 0; t < kThreads; ++t) {
+        workers.emplace_back([&stack, &popped_sum, &popped_count, t] {
+            for (int i = 0; i < kPerThread; ++i) {
+                stack.push(t * kPerThread + i);
+                // push/pop 交织：CAS 循环在同一 head 上竞争，try_reclaim 反复走独占/非独占分支。
+                if (std::shared_ptr<int> value = stack.pop()) {
+                    popped_sum.fetch_add(*value, std::memory_order_relaxed);
+                    popped_count.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+        });
+    }
+    for (auto& t : workers) {
+        t.join();
+    }
+
+    // 排空剩余，使总量覆盖每个元素恰好一次。
+    while (std::shared_ptr<int> value = stack.pop()) {
+        popped_sum.fetch_add(*value, std::memory_order_relaxed);
+        popped_count.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    EXPECT_EQ(popped_count.load(), kTotal);
+    constexpr std::int64_t kExpectedSum = static_cast<std::int64_t>(kTotal - 1) * kTotal / 2;
+    EXPECT_EQ(popped_sum.load(), kExpectedSum);
+    EXPECT_TRUE(stack.empty());
+}
+
+// ------------------------------- TaggedPointerStack -------------------------------
+
+TEST(TaggedPointerStack, HeadIsLockFree) {
+    // “无锁”声明的运行期复核，与 lock_free_stack.h 里的编译期 static_assert 对应：Head={ptr,tag}=16B
+    // 的 std::atomic 必须靠硬件双字 CAS（x86-64 的 CMPXCHG16B），不能退化为 libatomic 互斥锁。
+    // 用与内部 head_ 布局一致的 16B 原子做探针。
+    struct HeadLike {
+        void* ptr;
+        std::size_t tag;
+    };
+    static_assert(sizeof(HeadLike) == 2 * sizeof(void*), "HeadLike must mirror the 16B Head layout");
+
+    std::atomic<HeadLike> head{};
+    bool lock_free = std::atomic<HeadLike>::is_always_lock_free || head.is_lock_free();
+#if defined(__GNUC__) && !defined(__clang__) && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16)
+    // 关键：GCC 对 16B 原子的 is_lock_free() 恒为 false（只读页 load 的保守处理），但开了 -mcx16 后
+    // __GCC_HAVE_SYNC_COMPARE_AND_SWAP_16 已定义，说明目标具备硬件 cmpxchg16b，CAS 走 libatomic 的
+    // cx16 ifunc（无互斥）——真无锁。此处认硬件宏，避免 GCC 的误报把测试判红。
+    lock_free = true;
+#endif
+    EXPECT_TRUE(lock_free)
+        << "std::atomic<16B Head> is NOT lock-free here — the \"lock-free\" claim is false; "
+           "ensure -mcx16 + libatomic are in effect";
+}
+
+TEST(TaggedPointerStack, PreservesLifoOrder) {
+    TaggedPointerStack<int> stack;
+    EXPECT_TRUE(stack.empty());
+    for (int i = 0; i < 5; ++i) {
+        stack.push(i);
+    }
+    for (int i = 4; i >= 0; --i) {
+        int value = -1;
+        ASSERT_TRUE(stack.pop(value));
+        EXPECT_EQ(value, i);
+    }
+    EXPECT_TRUE(stack.empty());
+    int value = -1;
+    EXPECT_FALSE(stack.pop(value));
+}
+
+TEST(TaggedPointerStack, ConcurrentPushPopLosesNothing) {
+    // ASan/TSan 目标：(ptr, tag) 打包的 ABA 防护在多线程 churn 下正确——每个 push 的值恰好被
+    // pop 一次，校验和与计数守恒。tag 递增确保指针兜圈回到旧值时 CAS 仍失败，不会 ABA 误配。
+    constexpr int kThreads = 8;
+    constexpr int kPerThread = 100'000;
+    constexpr int kTotal = kThreads * kPerThread;
+
+    TaggedPointerStack<int> stack;
+    std::atomic<std::int64_t> popped_sum{0};
+    std::atomic<int> popped_count{0};
+
+    std::vector<std::thread> workers;
+    for (int t = 0; t < kThreads; ++t) {
+        workers.emplace_back([&stack, &popped_sum, &popped_count, t] {
+            for (int i = 0; i < kPerThread; ++i) {
+                stack.push(t * kPerThread + i);
+                int value = 0;
+                // push/pop 交织，CAS 循环在同一 head（含 tag）上竞争。
+                if (stack.pop(value)) {
+                    popped_sum.fetch_add(value, std::memory_order_relaxed);
+                    popped_count.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+        });
+    }
+    for (auto& t : workers) {
+        t.join();
+    }
+
+    // 排空剩余，使总量覆盖每个元素恰好一次。
+    int value = 0;
+    while (stack.pop(value)) {
         popped_sum.fetch_add(value, std::memory_order_relaxed);
         popped_count.fetch_add(1, std::memory_order_relaxed);
     }

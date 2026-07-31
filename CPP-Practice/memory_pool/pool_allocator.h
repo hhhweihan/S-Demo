@@ -31,8 +31,10 @@ class PoolAllocator {
 
     PoolAllocator() {
         for (std::size_t index = 0; index < kSizeClasses.size(); ++index) {
-            // 底层块要容纳 "header + 对齐填充 + payload"，不只是 payload。
-            allocators_[index].init(kUserPointerOffset + kSizeClasses[index], kDefaultBlockCount);
+            // 底层块要容纳 "header + 对齐填充 + payload"，不只是 payload。此外块大小必须是
+            // kAlignment 的整数倍：FixedAllocator 内块首尾相接、按 block_size 定长排布，只有
+            // 步长对齐才能保证 chunk 里每一块（不止首块）的用户指针都落在对齐边界上。
+            allocators_[index].init(aligned_block_size(kSizeClasses[index]), kDefaultBlockCount);
             active_small_allocations_[index].store(0);
         }
 
@@ -208,6 +210,12 @@ class PoolAllocator {
     static ThreadCacheRegistry& tls_registry() {
         static thread_local ThreadCacheRegistry registry;
         return registry;
+    }
+
+    // header 偏移 + payload 向上取整到 kAlignment，保证定长块步长对齐（见构造函数说明）。
+    static constexpr std::size_t aligned_block_size(std::size_t payload) {
+        const std::size_t raw = kUserPointerOffset + payload;
+        return ((raw + kAlignment - 1) / kAlignment) * kAlignment;
     }
 
     static std::size_t make_pool_header(int class_index) {

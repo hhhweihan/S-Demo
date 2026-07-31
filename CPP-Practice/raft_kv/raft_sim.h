@@ -174,6 +174,7 @@ struct Node {
     std::vector<char> readAckedBy;  // distinct peers that acked the current read round
     int readIndexValue = -1;
     bool readConfirmed = false;
+    int noopIndex = -1;  // index of this term's election no-op; a read waits for it to commit
 
     // ---- persistent state (mirrored to storage) ----
     int currentTerm = 0;
@@ -284,10 +285,16 @@ class Cluster {
     }
     // The read may be served once leadership is confirmed AND the state machine has caught up to
     // the readIndex. A leader that lost quorum never confirms → the read stays unavailable.
+    // The read is ALSO gated on the current term's no-op being committed: a freshly-elected leader
+    // whose commitIndex still trails (e.g. right after a reboot, before it re-commits the reloaded
+    // prefix) must not answer from a state machine that hasn't caught up, or it would return stale
+    // data. Once the no-op commits, commitIndex covers every prior committed entry, which
+    // applyCommitted() then applies.
     bool readReady(int leaderId, int readIndex) const {
         if (leaderId < 0) return false;
         const Node& l = nodes_.at(leaderId);
-        return l.alive && l.role == Role::Leader && l.readConfirmed && l.lastApplied >= readIndex;
+        return l.alive && l.role == Role::Leader && l.readConfirmed &&
+               l.commitIndex >= l.noopIndex && l.lastApplied >= readIndex;
     }
     // Convenience: run a ReadIndex round to completion and return the value, or nullopt if the
     // node could not confirm leadership within the budget (stale/partitioned leader).
@@ -449,6 +456,7 @@ class Cluster {
         // entries (Raft's no-op / current-term rule); append a no-op to make progress.
         node.log.push_back(LogEntry{node.currentTerm, "noop", "", ""});
         node.matchIndex[node.id] = node.lastLogIndex();
+        node.noopIndex = node.lastLogIndex();  // reads wait until this current-term entry commits
         persistLog(node);
         node.heartbeatDeadline = now_;  // send immediately
     }
@@ -659,8 +667,11 @@ class Cluster {
         node.lastIncludedIndex = args.lastIncludedIndex;
         node.lastIncludedTerm = args.lastIncludedTerm;
         node.store.restore(KVStore::deserialize(args.data));
-        node.commitIndex = std::max(node.commitIndex, node.lastIncludedIndex);
-        node.lastApplied = std::max(node.lastApplied, node.lastIncludedIndex);
+        // restore() reset the state machine to the snapshot boundary, so commit/apply must snap
+        // back to it too — not max(). If this follower had applied past lastIncludedIndex, keeping
+        // a higher lastApplied would leave the rolled-back entries permanently un-re-applied.
+        node.commitIndex = node.lastIncludedIndex;
+        node.lastApplied = node.lastIncludedIndex;
         node.storage->saveSnapshot(node.lastIncludedIndex, node.lastIncludedTerm,
                                    node.store.serialize(), node.log);
         send(node.id, from, InstallSnapshotReply{node.currentTerm, node.lastIncludedIndex});

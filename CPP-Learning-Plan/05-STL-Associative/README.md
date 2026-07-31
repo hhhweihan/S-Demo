@@ -11,7 +11,7 @@
 自编 STL（关联与算法部分）
 ├── 红黑树                 ← 阶段 17
 │   ├── insert（旋转 + 变色）
-│   ├── erase（6 种删除情况）
+│   ├── erase（4 种 delete-fixup 情形，含镜像）
 │   └── iterator（中序遍历）
 ├── set / map              ← 阶段 18
 │   ├── 基于 RBTree 的 set / multiset
@@ -41,7 +41,7 @@
 - [x] 红黑树插入 10 万随机数后，树高 ≤ 2×log₂(n)（黑高约束）
 - [x] `MyMap<string, int>` 支持 `lower_bound` 和 `upper_bound`
 - [x] `MyUnorderedMap` 在负载因子 0.75 时自动 rehash
-- [x] `PoolAllocator<T>` 已接入 allocator_traits 并通过 `std::vector` 功能验证；20%+ 性能提升留待专项 benchmark
+- [x] `PoolAllocator<T>` 经 `allocator_traits`（含 `rebind` 到节点类型）接入 `MyVector`/`MyList`/`MyMap`/`MySet` 及 `std::vector`，并有计数分配器用例验证节点分配确实走了自定义分配器；20%+ 性能提升留待专项 benchmark
 
 ## 模块完成情况
 

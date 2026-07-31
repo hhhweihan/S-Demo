@@ -92,16 +92,16 @@ class MemTable {
     // 三态查询最新版本。同 user_key 按 seq 降序排列，扫描中遇到的第一条匹配即最新版本。
     // 供 MiniDB 跨层查找：kDeleted 必须中止向 SSTable 继续查，否则删除会被旧值复活。
     LookupStatus Lookup(const std::string& key, std::string* value) const {
-        for (auto it = table_.begin(); it != table_.end(); ++it) {
-            const std::string user_key = ExtractUserKey(it.key());
-            if (user_key < key) continue;
-            if (user_key > key) break;  // 已越过目标 user_key（升序），不存在
-            const auto type = static_cast<ValueType>(ExtractTag(it.key()) & 0xFFu);
-            if (type == ValueType::kDeletion) return LookupStatus::kDeleted;
-            if (value != nullptr) *value = it.value();
-            return LookupStatus::kFound;
-        }
-        return LookupStatus::kNotFound;
+        // 构造该 user_key 的"最大 tag" internal key：tag 越大在同 user_key 内排越前（seq 降序），
+        // 故它 <= 该 user_key 的任意真实版本。Seek 到第一个 >= 它的节点即最新版本，O(log n)。
+        const std::string lookup_key = MakeInternalKey(kMaxSequence, ValueType::kValue, key);
+        auto it = table_.Seek(lookup_key);
+        if (it == table_.end()) return LookupStatus::kNotFound;
+        if (ExtractUserKey(it.key()) != key) return LookupStatus::kNotFound;  // 越过目标，不存在
+        const auto type = static_cast<ValueType>(ExtractTag(it.key()) & 0xFFu);
+        if (type == ValueType::kDeletion) return LookupStatus::kDeleted;
+        if (value != nullptr) *value = it.value();
+        return LookupStatus::kFound;
     }
 
     // 兼容旧接口：命中值返回之，墓碑/缺失均返回 nullopt。

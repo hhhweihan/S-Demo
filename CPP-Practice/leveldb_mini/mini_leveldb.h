@@ -199,9 +199,14 @@ class MiniDB {
         const std::uint64_t number = ++next_file_number_;
         auto table = std::make_unique<SSTable>();
         table->BuildFromEntries(SSTablePath(directory_, 0, number), mem_.ExportSorted());
+        // 正确的持久化次序：SSTable 数据落盘（BuildFromEntries 内 fsync）→ 目录项落盘（下面 fsync
+        // 目录）→ 才能截断 WAL。BuildFromEntries 只保证文件 inode 内容 durable，新文件的目录项
+        // （dentry）是否落盘取决于对父目录 fsync；不做这一步，崩溃后可能"SSTable 内容在盘上、目录里
+        // 却查不到该文件"，而 WAL 又已被清空，整个 flush 掉的 MemTable 就此丢失。
+        SyncDirectory(directory_);
         level0_.push_back(std::move(table));
         mem_.Clear();
-        wal_.Reset();  // 数据已 durable 进 SSTable，WAL 可清空
+        wal_.Reset();  // SSTable 数据与目录项均已 durable，WAL 使命完成，可清空
 
         if (level0_.size() >= kL0CompactionTrigger) {
             CompactToBottom();
@@ -269,6 +274,17 @@ class MiniDB {
     std::size_t Level1FileCount() const { return level1_.size(); }
 
  private:
+    // fsync 父目录，让新建 SSTable 的目录项（dentry）落盘。对文件本身 fsync 只保证其内容 durable，
+    // 目录项的持久化必须对包含它的目录单独 fsync（O_RDONLY|O_DIRECTORY 打开后 fsync）。
+    static void SyncDirectory(const std::filesystem::path& dir) {
+        const int fd = ::open(dir.string().c_str(), O_RDONLY | O_DIRECTORY);
+        if (fd < 0) {
+            return;
+        }
+        ::fsync(fd);
+        ::close(fd);
+    }
+
     // 扫描目录，按文件名解析 level/number，载入合法 SSTable，重建分层文件集与文件号计数。
     void LoadExistingTables() {
         struct Loaded {

@@ -15,7 +15,7 @@
 │   └── reverse_iterator
 ├── vector / deque           ← 阶段 14
 │   ├── 动态数组 + 扩容策略
-│   └── 分块双端队列
+│   └── 环形缓冲双端队列
 ├── list / forward_list      ← 阶段 15
 │   ├── 双向链表
 │   └── 单向链表

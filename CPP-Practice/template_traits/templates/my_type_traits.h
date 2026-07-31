@@ -191,6 +191,10 @@ struct decay {
 template <typename T>
 using decay_t = typename decay<T>::type;
 
+// 剥掉 cv 后与 void 比较，四种 cv-void 一并识别。
+template <typename T>
+struct is_void : is_same<remove_cv_t<T>, void> {};
+
 namespace detail {
 
 // 经典 SFINAE 探测：构造表达式合法时 int 版胜出返回 true_type；不合法时该版被剔除，
@@ -216,8 +220,13 @@ auto test_convertible(...) -> false_type;
 template <typename T, typename... Args>
 struct is_constructible : decltype(detail::test_constructible<T, Args...>(0)) {};
 
+// void 组合无法用 accept<To>(declval<From>()) 表达（void 不能做形参/实参），按标准单列：
+// 仅 (cv)void → (cv)void 为真，其余任一为 void 的组合为假；非 void 走 SFINAE 探测。
 template <typename From, typename To>
-struct is_convertible : decltype(detail::test_convertible<From, To>(0)) {};
+struct is_convertible
+    : conditional<is_void<From>::value || is_void<To>::value,
+                  integral_constant<bool, is_void<From>::value && is_void<To>::value>,
+                  decltype(detail::test_convertible<From, To>(0))>::type {};
 
 template <typename F, typename... Args>
 struct invoke_result {
@@ -277,5 +286,24 @@ struct is_integral<volatile T> : is_integral<T> {};
 
 template <typename T>
 struct is_integral<const volatile T> : is_integral<T> {};
+
+// _v 变量模板：省去调用方写 ::value，与标准库 C++17 的 *_v 惯例一致。
+template <typename T, typename U>
+inline constexpr bool is_same_v = is_same<T, U>::value;
+
+template <typename T>
+inline constexpr bool is_void_v = is_void<T>::value;
+
+template <typename T>
+inline constexpr bool is_array_v = is_array<T>::value;
+
+template <typename T>
+inline constexpr bool is_integral_v = is_integral<T>::value;
+
+template <typename T, typename... Args>
+inline constexpr bool is_constructible_v = is_constructible<T, Args...>::value;
+
+template <typename From, typename To>
+inline constexpr bool is_convertible_v = is_convertible<From, To>::value;
 
 }  // namespace demo::traits

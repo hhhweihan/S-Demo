@@ -25,10 +25,13 @@ struct Tuple<Head, Tail...> : Tuple<Tail...> {
 
     constexpr Tuple() = default;
 
-    // H/Ts 独立于 Head/Tail 以支持完美转发；sizeof... 约束保证实参个数与本层+剩余层匹配，
-    // 同时防止单实参时它抢占拷贝/移动构造。基类先于成员初始化(顺序由声明决定,与写法无关)。
+    // H/Ts 独立于 Head/Tail 以支持完美转发；sizeof... 约束保证实参个数与本层+剩余层匹配。
+    // 再加 !is_same 自类型排除：单实参且实参就是本 Tuple 时,让它走隐式拷贝/移动构造而非被此
+    // 转发构造抢占(与 Function 转发构造的 !is_same_v<decay_t<F>, Function> 写法同理)。
+    // 基类先于成员初始化(顺序由声明决定,与写法无关)。
     template <typename H, typename... Ts,
-              typename = std::enable_if_t<sizeof...(Ts) == sizeof...(Tail)>>
+              typename = std::enable_if_t<sizeof...(Ts) == sizeof...(Tail) &&
+                                          !std::is_same_v<std::decay_t<H>, Tuple>>>
     constexpr explicit Tuple(H&& head, Ts&&... tail)
         : Base(std::forward<Ts>(tail)...), value(std::forward<H>(head)) {}
 };

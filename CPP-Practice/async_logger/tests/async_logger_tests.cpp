@@ -1,6 +1,7 @@
 #include "mini_logger.h"
 
 #include <atomic>
+#include <condition_variable>
 #include <map>
 #include <string>
 #include <thread>
@@ -36,6 +37,35 @@ class CaptureSink : public Sink {
  private:
     mutable std::mutex mutex_;
     std::vector<std::string> lines_;
+};
+
+// A sink whose write() blocks until release() is called. Used to stall the worker
+// so the bounded queue actually fills and the overflow policy kicks in.
+class BlockingSink : public Sink {
+ public:
+    void write(const std::string& /*line*/) override {
+        std::unique_lock<std::mutex> lock(mutex_);
+        cv_.wait(lock, [this] { return released_; });
+        ++count_;
+    }
+    void flush() override {}
+    void release() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            released_ = true;
+        }
+        cv_.notify_all();
+    }
+    std::size_t count() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return count_;
+    }
+
+ private:
+    mutable std::mutex mutex_;
+    std::condition_variable cv_;
+    bool released_ = false;
+    std::size_t count_ = 0;
 };
 
 // Everything after the " - " separator up to the trailing newline is the message.
@@ -154,6 +184,77 @@ TEST(AsyncLogger, ConcurrentProducersLoseNoLines) {
     std::map<std::string, int> seen;
     for (const auto& line : lines) {
         EXPECT_EQ(line.back(), '\n');  // intact line ends with its newline
+        ++seen[extract_payload(line)];
+    }
+    EXPECT_EQ(seen.size(), static_cast<std::size_t>(kThreads * kPerThread));
+    for (const auto& [payload, count] : seen) {
+        EXPECT_EQ(count, 1) << "duplicated or torn: " << payload;
+    }
+}
+
+// Bounded queue + Drop policy: with the worker stalled on a blocking sink the
+// queue fills to max_pending and every further line is dropped, never blocking
+// the producer. accepted + dropped must account for exactly every attempt, and
+// once the sink is released the sink receives exactly the accepted lines.
+TEST(AsyncLogger, DropPolicyDropsWhenQueueFull) {
+    auto sink = std::make_shared<BlockingSink>();
+    AsyncLogger::Options options;
+    options.max_pending = 8;
+    options.overflow = AsyncLogger::Overflow::Drop;
+    AsyncLogger logger(options);
+    logger.add_sink(sink);
+
+    constexpr int kTotal = 5000;
+    for (int i = 0; i < kTotal; ++i) {
+        logger.log(Level::Info, "t.cpp", i, "drop" + std::to_string(i));
+    }
+
+    // Worker is blocked in sink->write, so the queue saturated and dropped lines.
+    EXPECT_GT(logger.dropped(), 0u);
+    EXPECT_EQ(logger.accepted() + logger.dropped(), static_cast<std::size_t>(kTotal));
+    // Queue caps at max_pending, so worker drains at most one full batch then it
+    // refills to at most another full queue before the (blocked) sink writes it.
+    EXPECT_LE(logger.accepted(), 2 * options.max_pending);
+
+    sink->release();
+    logger.flush();
+    // No line is written more than accepted; the accepted ones all reach the sink.
+    EXPECT_EQ(logger.written(), logger.accepted());
+    EXPECT_EQ(sink->count(), logger.accepted());
+}
+
+// Bounded queue + Block policy: a small queue backpressures many producers but
+// must never lose a line. Every N*M line arrives exactly once and intact.
+TEST(AsyncLogger, BlockPolicyLosesNoLinesUnderBackpressure) {
+    constexpr int kThreads = 8;
+    constexpr int kPerThread = 2000;
+    auto sink = std::make_shared<CaptureSink>();
+    AsyncLogger::Options options;
+    options.max_pending = 64;  // deliberately tiny relative to the load
+    options.overflow = AsyncLogger::Overflow::Block;
+    AsyncLogger logger(options);
+    logger.add_sink(sink);
+
+    std::vector<std::thread> producers;
+    for (int t = 0; t < kThreads; ++t) {
+        producers.emplace_back([&logger, t] {
+            for (int i = 0; i < kPerThread; ++i) {
+                logger.log(Level::Info, "t.cpp", i,
+                           "blk" + std::to_string(t) + "_" + std::to_string(i));
+            }
+        });
+    }
+    for (auto& p : producers) p.join();
+    logger.flush();
+
+    EXPECT_EQ(logger.dropped(), 0u);  // block policy never drops
+    EXPECT_EQ(logger.accepted(), static_cast<std::size_t>(kThreads * kPerThread));
+
+    const auto lines = sink->snapshot();
+    ASSERT_EQ(lines.size(), static_cast<std::size_t>(kThreads * kPerThread));
+    std::map<std::string, int> seen;
+    for (const auto& line : lines) {
+        EXPECT_EQ(line.back(), '\n');
         ++seen[extract_payload(line)];
     }
     EXPECT_EQ(seen.size(), static_cast<std::size_t>(kThreads * kPerThread));

@@ -25,6 +25,23 @@ static_assert([] {
 static_assert(tp::Tuple<int, int>(1, 2) == tp::Tuple<int, int>(1, 2));
 static_assert(tp::Tuple<int, int>(1, 2) != tp::Tuple<int, int>(1, 3));
 
+// 回归：单元素 Tuple 的转发构造曾无自类型排除,拷贝/移动非 const 左值会被它抢占而编译失败。
+TEST(VariadicTuple, SingleElementIsCopyAndMoveConstructible) {
+    tp::Tuple<int> a(1);
+    tp::Tuple<int> b(a);  // 拷贝构造：不得被转发构造抢占。
+    EXPECT_EQ(tp::get<0>(b), 1);
+
+    tp::Tuple<int> c(std::move(a));  // 移动构造。
+    EXPECT_EQ(tp::get<0>(c), 1);
+
+    tp::Tuple<std::string> s(std::string("hi"));
+    tp::Tuple<std::string> s_copy(s);  // 非 const 左值拷贝。
+    EXPECT_EQ(tp::get<0>(s_copy), "hi");
+
+    tp::Tuple<std::string> s_move(std::move(s));  // 移动构造。
+    EXPECT_EQ(tp::get<0>(s_move), "hi");
+}
+
 TEST(VariadicTuple, GetReadsAndMutates) {
     tp::Tuple<int, double, std::string> t(1, 2.5, "ok");
     EXPECT_EQ(tp::get<0>(t), 1);
