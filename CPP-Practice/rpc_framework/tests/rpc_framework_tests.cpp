@@ -4,6 +4,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <stdexcept>
 
 using mini_rpc::decode_request;
 using mini_rpc::decode_response;

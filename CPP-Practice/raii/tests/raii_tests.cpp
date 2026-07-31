@@ -5,6 +5,9 @@
 #include <string>
 
 #include <gtest/gtest.h>
+#include <algorithm>
+#include <stdexcept>
+#include <utility>
 
 TEST(ScopeGuard, RunsActionOnScopeExit) {
     bool ran = false;

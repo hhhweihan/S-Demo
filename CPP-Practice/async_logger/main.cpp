@@ -7,6 +7,7 @@
 #include <thread>
 #include <vector>
 
+#include <memory>
 #include "mini_logger.h"
 
 namespace {

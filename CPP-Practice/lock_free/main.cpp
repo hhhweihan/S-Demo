@@ -12,6 +12,7 @@
 #include <exception>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <queue>
 #include <sstream>
 #include <stdexcept>

@@ -10,6 +10,7 @@
 #include <utility>
 
 #include <gtest/gtest.h>
+#include <cstddef>
 
 namespace er = demo::erasure;
 

@@ -7,6 +7,9 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <cstddef>
+#include <memory>
+#include <mutex>
 
 namespace {
 

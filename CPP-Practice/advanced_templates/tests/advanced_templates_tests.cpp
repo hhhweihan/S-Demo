@@ -11,6 +11,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include "templates/my_optional.h"
 #include "templates/my_tuple.h"
 #include "templates/my_type_traits.h"

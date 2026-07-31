@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <cstdint>
 
 using raft_sim::Cluster;
 using raft_sim::Config;

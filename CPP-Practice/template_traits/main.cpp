@@ -6,6 +6,8 @@
 #include <utility>
 #include <vector>
 
+#include <algorithm>
+#include <cstddef>
 #include "templates/my_type_traits.h"
 
 namespace demo {

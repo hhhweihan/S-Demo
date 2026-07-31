@@ -6,6 +6,8 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <cstddef>
+#include <stdexcept>
 
 using mini_stl::MyDeque;
 using mini_stl::MyList;

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include <cstdint>
 #include "mini_rpc.h"
 
 namespace {

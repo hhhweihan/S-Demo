@@ -4,6 +4,8 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <cstddef>
+#include <stdexcept>
 
 using mini_hpn::analyze_platform;
 using mini_hpn::Backend;

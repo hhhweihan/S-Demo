@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include <algorithm>
 #include "mini_raft_kv.h"
 
 namespace {

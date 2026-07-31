@@ -8,6 +8,8 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <cstddef>
+#include <utility>
 
 using mini_stl::MyMap;
 using mini_stl::MySet;

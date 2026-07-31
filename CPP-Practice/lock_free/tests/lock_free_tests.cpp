@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <stdexcept>
 
 TEST(SPSCQueue, PreservesFifoOrder) {
     SPSCQueue<int> queue(8);

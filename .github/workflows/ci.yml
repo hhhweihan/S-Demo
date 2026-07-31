@@ -70,9 +70,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Pin the exact clang-format version. apt's clang-format tracks the distro's
+      # LLVM and drifts between runner images, so its formatting verdict differs from
+      # what a contributor runs locally -- a moving target that fails on style noise,
+      # not real defects. The PyPI wheel is byte-identical everywhere; bump this pin
+      # deliberately and reformat in the same commit.
       - name: Install clang-format
-        run: sudo apt-get update && sudo apt-get install -y clang-format
+        run: pipx install clang-format==22.1.8
       - name: Check formatting
         run: |
+          clang-format --version
           files=$(find CPP-Practice -name '*.h' -o -name '*.cpp' | grep -v '/build')
           clang-format --dry-run --Werror $files
