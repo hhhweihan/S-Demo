@@ -1,267 +1,281 @@
-#pragma once  // 防止该 type_traits 头文件在同一编译单元中被重复包含。
+#pragma once
+
+#include <cstddef>
+#include <utility>  // std::declval: 在未求值上下文里"造出"一个 T 值，无需 T 可默认构造。
+
+namespace demo::traits {
+
+template <typename T, T Value>
+struct integral_constant {
+    static constexpr T value = Value;
+    using value_type = T;
+    using type = integral_constant;
 
-#include <cstddef>  // 使用 std::size_t 表示数组长度等编译期大小。
-#include <utility>  // 使用 std::declval 模拟表达式类型推导，不真正构造对象。
+    // 隐式转换到 value_type，使对象能直接用在常量表达式/需要值的位置，贴合标准库接口。
+    constexpr operator value_type() const noexcept { return value; }
+};
 
-namespace demo::traits {  // 自定义 traits 放在 demo::traits 命名空间中，避免和 std::traits 冲突。
+using true_type = integral_constant<bool, true>;
+using false_type = integral_constant<bool, false>;
 
-template <typename T, T Value>  // T 是常量类型，Value 是编译期常量值。
-struct integral_constant {  // 用类型包装一个编译期常量，是 true_type/false_type 的基础。
-  static constexpr T value = Value;  // 暴露编译期常量值。
-  using value_type = T;  // 暴露常量值的类型。
-  using type = integral_constant;  // 暴露自身类型，模仿标准库 integral_constant 接口。
+template <typename T, typename U>
+struct is_same : false_type {};
 
-  constexpr operator value_type() const noexcept { return value; }  // 允许对象在常量表达式中隐式转换为其值。
-};  // integral_constant 定义结束。
+// 仅当两个实参是同一类型时匹配的偏特化。
+template <typename T>
+struct is_same<T, T> : true_type {};
 
-using true_type = integral_constant<bool, true>;  // 表示编译期 true 的类型。
-using false_type = integral_constant<bool, false>;  // 表示编译期 false 的类型。
+// 主模板不提供 ::type，让依赖它的模板在条件为假时替换失败（SFINAE 的开关本体）。
+template <bool B, typename T = void>
+struct enable_if {};
 
-template <typename T, typename U>  // T/U 是待比较的两个类型。
-struct is_same : false_type {};  // 默认认为两个类型不同。
+template <typename T>
+struct enable_if<true, T> {
+    using type = T;
+};
 
-template <typename T>  // 当两个模板参数都是同一个 T 时匹配该特化。
-struct is_same<T, T> : true_type {};  // 相同类型时继承 true_type。
+// 只要参数包全部替换成功结果就是 void；配合 decltype 用来探测表达式/类型是否合法。
+template <typename...>
+using void_t = void;
 
-template <bool B, typename T = void>  // B 控制是否暴露 type，T 是成功时返回的类型。
-struct enable_if {};  // 默认不提供 type，让依赖它的模板替换失败。
+template <typename T>
+struct remove_const {
+    using type = T;
+};
 
-template <typename T>  // 当条件为 true 时匹配该特化。
-struct enable_if<true, T> {  // enable_if 成功分支。
-  using type = T;  // 暴露 type，使模板替换继续成功。
-};  // enable_if<true> 定义结束。
+template <typename T>
+struct remove_const<const T> {
+    using type = T;
+};
 
-template <typename...>  // 接收任意类型参数包。
-using void_t = void;  // 只要参数替换成功，结果类型就是 void，常用于检测表达式是否有效。
+template <typename T>
+struct remove_volatile {
+    using type = T;
+};
 
-template <typename T>  // T 是待移除 const 的类型。
-struct remove_const {  // 默认类型没有顶层 const。
-  using type = T;  // 原样返回类型。
-};  // remove_const 主模板结束。
+template <typename T>
+struct remove_volatile<volatile T> {
+    using type = T;
+};
 
-template <typename T>  // 匹配带顶层 const 的类型。
-struct remove_const<const T> {  // const 特化分支。
-  using type = T;  // 去掉顶层 const 后返回原始 T。
-};  // remove_const<const T> 特化结束。
+template <typename T>
+struct remove_cv {
+    using type = typename remove_volatile<typename remove_const<T>::type>::type;
+};
 
-template <typename T>  // T 是待移除 volatile 的类型。
-struct remove_volatile {  // 默认类型没有顶层 volatile。
-  using type = T;  // 原样返回类型。
-};  // remove_volatile 主模板结束。
+template <typename T>
+struct remove_reference {
+    using type = T;
+};
 
-template <typename T>  // 匹配带顶层 volatile 的类型。
-struct remove_volatile<volatile T> {  // volatile 特化分支。
-  using type = T;  // 去掉顶层 volatile 后返回原始 T。
-};  // remove_volatile<volatile T> 特化结束。
+template <typename T>
+struct remove_reference<T&> {
+    using type = T;
+};
 
-template <typename T>  // T 是待移除 const/volatile 的类型。
-struct remove_cv {  // 组合 remove_const 和 remove_volatile。
-  using type = typename remove_volatile<typename remove_const<T>::type>::type;  // 先移除 const，再移除 volatile。
-};  // remove_cv 定义结束。
+template <typename T>
+struct remove_reference<T&&> {
+    using type = T;
+};
 
-template <typename T>  // T 是待移除引用的类型。
-struct remove_reference {  // 默认类型不是引用。
-  using type = T;  // 原样返回类型。
-};  // remove_reference 主模板结束。
+template <typename T>
+using remove_const_t = typename remove_const<T>::type;
 
-template <typename T>  // 匹配左值引用类型。
-struct remove_reference<T&> {  // 左值引用特化分支。
-  using type = T;  // 去掉 & 后返回被引用类型。
-};  // remove_reference<T&> 特化结束。
+template <typename T>
+using remove_cv_t = typename remove_cv<T>::type;
 
-template <typename T>  // 匹配右值引用类型。
-struct remove_reference<T&&> {  // 右值引用特化分支。
-  using type = T;  // 去掉 && 后返回被引用类型。
-};  // remove_reference<T&&> 特化结束。
+template <typename T>
+using remove_reference_t = typename remove_reference<T>::type;
 
-template <typename T>  // T 是待处理类型。
-using remove_const_t = typename remove_const<T>::type;  // remove_const 的别名模板，减少 typename 书写。
+template <typename T>
+struct add_pointer {
+    // 先去引用再加指针：引用没有"指向自身的指针"，直接 T* 对 int& 会失败。
+    using type = remove_reference_t<T>*;
+};
 
-template <typename T>  // T 是待处理类型。
-using remove_cv_t = typename remove_cv<T>::type;  // remove_cv 的别名模板。
+namespace detail {
 
-template <typename T>  // T 是待处理类型。
-using remove_reference_t = typename remove_reference<T>::type;  // remove_reference 的别名模板。
+// 重载技巧探测 T& 是否合法：能形成引用时优先选中 int 版返回 T&；
+// 对 void 之类无法引用的类型，T& 在此重载上 SFINAE 失败，回退到 ... 版保留 T。
+template <typename T>
+auto try_add_lvalue_reference(int) -> T&;
 
-template <typename T>  // T 是待添加指针的类型。
-struct add_pointer {  // 模拟 std::add_pointer 的基础行为。
-  using type = remove_reference_t<T>*;  // 先移除引用，再添加指针符号。
-};  // add_pointer 定义结束。
+template <typename T>
+auto try_add_lvalue_reference(...) -> T;
 
-namespace detail {  // detail 命名空间保存实现细节，避免暴露给示例调用者。
+}  // namespace detail
 
-template <typename T>  // T 是尝试添加左值引用的类型。
-auto try_add_lvalue_reference(int) -> T&;  // 优先重载：如果 T& 合法，就返回 T&。
+template <typename T>
+struct add_lvalue_reference {
+    using type = decltype(detail::try_add_lvalue_reference<T>(0));
+};
 
-template <typename T>  // T 是尝试添加左值引用的类型。
-auto try_add_lvalue_reference(...) -> T;  // 兜底重载：T& 不合法时保留 T。
+template <typename T>
+using add_pointer_t = typename add_pointer<T>::type;
 
-}  // namespace detail  // add_lvalue_reference 的检测细节结束。
+template <typename T>
+using add_lvalue_reference_t = typename add_lvalue_reference<T>::type;
 
-template <typename T>  // T 是待添加左值引用的类型。
-struct add_lvalue_reference {  // 模拟 std::add_lvalue_reference。
-  using type = decltype(detail::try_add_lvalue_reference<T>(0));  // 通过重载决议得到 T& 或 T。
-};  // add_lvalue_reference 定义结束。
+namespace detail {
 
-template <typename T>  // T 是待处理类型。
-using add_pointer_t = typename add_pointer<T>::type;  // add_pointer 的别名模板。
+template <typename T>
+struct is_pointer_helper : false_type {};
 
-template <typename T>  // T 是待处理类型。
-using add_lvalue_reference_t = typename add_lvalue_reference<T>::type;  // add_lvalue_reference 的别名模板。
+template <typename T>
+struct is_pointer_helper<T*> : true_type {};
 
-namespace detail {  // 保存 is_pointer 的辅助特化。
+}  // namespace detail
 
-template <typename T>  // T 是移除 cv 后的待判断类型。
-struct is_pointer_helper : false_type {};  // 默认不是指针。
+// 先剥掉顶层 cv，才能让 int* const、int* volatile 这类也被判为指针。
+template <typename T>
+struct is_pointer : detail::is_pointer_helper<remove_cv_t<T>> {};
 
-template <typename T>  // 匹配任意对象/函数指针类型。
-struct is_pointer_helper<T*> : true_type {};  // T* 形式说明它是指针。
+template <typename T>
+struct is_reference : false_type {};
 
-}  // namespace detail  // is_pointer 辅助实现结束。
+template <typename T>
+struct is_reference<T&> : true_type {};
 
-template <typename T>  // T 是待判断类型。
-struct is_pointer : detail::is_pointer_helper<remove_cv_t<T>> {};  // 去掉顶层 cv 后复用指针特化判断。
+template <typename T>
+struct is_reference<T&&> : true_type {};
 
-template <typename T>  // T 是待判断类型。
-struct is_reference : false_type {};  // 默认不是引用。
+template <typename T>
+struct is_array : false_type {};
 
-template <typename T>  // 匹配左值引用。
-struct is_reference<T&> : true_type {};  // T& 是引用类型。
+// 未知边界 T[] 与已知边界 T[N] 需要各自一个偏特化才能都命中。
+template <typename T>
+struct is_array<T[]> : true_type {};
 
-template <typename T>  // 匹配右值引用。
-struct is_reference<T&&> : true_type {};  // T&& 是引用类型。
+template <typename T, std::size_t N>
+struct is_array<T[N]> : true_type {};
 
-template <typename T>  // T 是待判断类型。
-struct is_array : false_type {};  // 默认不是数组。
+template <bool B, typename T, typename F>
+struct conditional {
+    using type = T;
+};
 
-template <typename T>  // 匹配未知边界数组。
-struct is_array<T[]> : true_type {};  // T[] 是数组类型。
+template <typename T, typename F>
+struct conditional<false, T, F> {
+    using type = F;
+};
 
-template <typename T, std::size_t N>  // T 是元素类型，N 是数组长度。
-struct is_array<T[N]> : true_type {};  // T[N] 是已知边界数组类型。
+template <typename T>
+struct remove_extent {
+    using type = T;
+};
 
-template <bool B, typename T, typename F>  // B 是条件，T/F 是两个候选类型。
-struct conditional {  // 条件为 true 的默认分支。
-  using type = T;  // 选择 T。
-};  // conditional 主模板结束。
+template <typename T>
+struct remove_extent<T[]> {
+    using type = T;
+};
 
-template <typename T, typename F>  // 条件为 false 时匹配该特化。
-struct conditional<false, T, F> {  // conditional 的 false 分支。
-  using type = F;  // 选择 F。
-};  // conditional<false> 特化结束。
+template <typename T, std::size_t N>
+struct remove_extent<T[N]> {
+    using type = T;
+};
 
-template <typename T>  // T 是待移除数组维度的类型。
-struct remove_extent {  // 默认不是数组。
-  using type = T;  // 原样返回类型。
-};  // remove_extent 主模板结束。
+template <typename T>
+using remove_extent_t = typename remove_extent<T>::type;
 
-template <typename T>  // 匹配未知边界数组。
-struct remove_extent<T[]> {  // T[] 特化分支。
-  using type = T;  // 去掉一层数组维度，得到元素类型。
-};  // remove_extent<T[]> 特化结束。
+template <typename T>
+struct decay {
+ private:
+    using U = remove_reference_t<T>;
 
-template <typename T, std::size_t N>  // 匹配已知边界数组。
-struct remove_extent<T[N]> {  // T[N] 特化分支。
-  using type = T;  // 去掉一层数组维度，得到元素类型。
-};  // remove_extent<T[N]> 特化结束。
+ public:
+    // 复刻按值传参的类型退化：数组→指向首元素的指针，否则剥掉顶层 cv（函数类型此简化版不处理）。
+    using type = typename conditional<is_array<U>::value, add_pointer_t<remove_extent_t<U>>,
+                                      remove_cv_t<U>>::type;
+};
 
-template <typename T>  // T 是待处理类型。
-using remove_extent_t = typename remove_extent<T>::type;  // remove_extent 的别名模板。
+template <typename T>
+using decay_t = typename decay<T>::type;
 
-template <typename T>  // T 是待退化的类型。
-struct decay {  // 简化版 std::decay，处理引用、数组和 cv 限定。
- private:  // 中间类型只供 decay 内部使用。
-  using U = remove_reference_t<T>;  // 先移除引用，得到后续判断的基础类型。
+namespace detail {
 
- public:  // 暴露最终退化后的 type。
-  using type = typename conditional<  // 根据 U 是否为数组选择不同退化规则。
-      is_array<U>::value,  // 数组类型需要退化为指向首元素的指针。
-      add_pointer_t<remove_extent_t<U>>,  // 数组分支：去掉一层数组维度后添加指针。
-      remove_cv_t<U>>::type;  // 非数组分支：去掉顶层 const/volatile。
-};  // decay 定义结束。
+// 经典 SFINAE 探测：构造表达式合法时 int 版胜出返回 true_type；不合法时该版被剔除，
+// 只剩 ... 版返回 false_type。第一实参 0 用来在两个重载间制造优先级。
+template <typename T, typename... Args>
+auto test_constructible(int) -> decltype(T(std::declval<Args>()...), true_type{});
 
-template <typename T>  // T 是待处理类型。
-using decay_t = typename decay<T>::type;  // decay 的别名模板。
+template <typename, typename...>
+auto test_constructible(...) -> false_type;
 
-namespace detail {  // 保存 constructible/convertible 的表达式检测细节。
+// accept<To> 只声明不定义：借"能否把 From 实参传给形参 To"来检测隐式可转换性。
+template <typename To>
+void accept(To);
 
-template <typename T, typename... Args>  // T 是目标类型，Args 是构造实参类型包。
-auto test_constructible(int) -> decltype(T(std::declval<Args>()...), true_type{});  // 构造表达式合法时返回 true_type。
+template <typename From, typename To>
+auto test_convertible(int) -> decltype(accept<To>(std::declval<From>()), true_type{});
 
-template <typename, typename...>  // 兜底重载不关心具体类型。
-auto test_constructible(...) -> false_type;  // 构造表达式不合法时通过 SFINAE 选择 false_type。
+template <typename, typename>
+auto test_convertible(...) -> false_type;
 
-template <typename To>  // To 是转换目标类型。
-void accept(To);  // 声明一个接收 To 的函数，用于检测 From 能否传给 To。
+}  // namespace detail
 
-template <typename From, typename To>  // From 是源类型，To 是目标类型。
-auto test_convertible(int) -> decltype(accept<To>(std::declval<From>()), true_type{});  // 如果 From 可传给 To，则返回 true_type。
+template <typename T, typename... Args>
+struct is_constructible : decltype(detail::test_constructible<T, Args...>(0)) {};
 
-template <typename, typename>  // 兜底重载不关心具体类型。
-auto test_convertible(...) -> false_type;  // 转换表达式不合法时通过 SFINAE 选择 false_type。
+template <typename From, typename To>
+struct is_convertible : decltype(detail::test_convertible<From, To>(0)) {};
 
-}  // namespace detail  // 可构造/可转换检测细节结束。
+template <typename F, typename... Args>
+struct invoke_result {
+    // declval 造出未求值的 F(Args...) 调用表达式,decltype 取其结果类型而不真正调用。
+    using type = decltype(std::declval<F>()(std::declval<Args>()...));
+};
 
-template <typename T, typename... Args>  // T 是目标类型，Args 是构造参数类型包。
-struct is_constructible : decltype(detail::test_constructible<T, Args...>(0)) {};  // 继承检测函数返回的 true_type 或 false_type。
+template <typename F, typename... Args>
+using invoke_result_t = typename invoke_result<F, Args...>::type;
 
-template <typename From, typename To>  // From 是源类型，To 是目标类型。
-struct is_convertible : decltype(detail::test_convertible<From, To>(0)) {};  // 继承检测函数返回的 true_type 或 false_type。
+// 逐个整数类型做全特化,标准库正是这样以"白名单"定义 is_integral 而非靠某种通用判据。
+template <typename T>
+struct is_integral : false_type {};
 
-template <typename F, typename... Args>  // F 是可调用对象类型，Args 是调用参数类型包。
-struct invoke_result {  // 推导调用 F(Args...) 后的返回类型。
-  using type = decltype(std::declval<F>()(std::declval<Args>()...));  // 用 declval 构造未求值调用表达式并取其类型。
-};  // invoke_result 定义结束。
+template <>
+struct is_integral<bool> : true_type {};
 
-template <typename F, typename... Args>  // F 是可调用对象类型，Args 是调用参数类型包。
-using invoke_result_t = typename invoke_result<F, Args...>::type;  // invoke_result 的别名模板。
+template <>
+struct is_integral<char> : true_type {};
 
-template <typename T>  // T 是待判断类型。
-struct is_integral : false_type {};  // 默认不是整数类型。
+template <>
+struct is_integral<signed char> : true_type {};
 
-template <>  // bool 是整数类型之一。
-struct is_integral<bool> : true_type {};  // bool 判断为 true。
+template <>
+struct is_integral<unsigned char> : true_type {};
 
-template <>  // char 是整数类型之一。
-struct is_integral<char> : true_type {};  // char 判断为 true。
+template <>
+struct is_integral<short> : true_type {};
 
-template <>  // signed char 是整数类型之一。
-struct is_integral<signed char> : true_type {};  // signed char 判断为 true。
+template <>
+struct is_integral<unsigned short> : true_type {};
 
-template <>  // unsigned char 是整数类型之一。
-struct is_integral<unsigned char> : true_type {};  // unsigned char 判断为 true。
+template <>
+struct is_integral<int> : true_type {};
 
-template <>  // short 是整数类型之一。
-struct is_integral<short> : true_type {};  // short 判断为 true。
+template <>
+struct is_integral<unsigned int> : true_type {};
 
-template <>  // unsigned short 是整数类型之一。
-struct is_integral<unsigned short> : true_type {};  // unsigned short 判断为 true。
+template <>
+struct is_integral<long> : true_type {};
 
-template <>  // int 是整数类型之一。
-struct is_integral<int> : true_type {};  // int 判断为 true。
+template <>
+struct is_integral<unsigned long> : true_type {};
 
-template <>  // unsigned int 是整数类型之一。
-struct is_integral<unsigned int> : true_type {};  // unsigned int 判断为 true。
+template <>
+struct is_integral<long long> : true_type {};
 
-template <>  // long 是整数类型之一。
-struct is_integral<long> : true_type {};  // long 判断为 true。
+template <>
+struct is_integral<unsigned long long> : true_type {};
 
-template <>  // unsigned long 是整数类型之一。
-struct is_integral<unsigned long> : true_type {};  // unsigned long 判断为 true。
+// cv 限定不改变"是否整数",转发给无 cv 版本，省去为每个整数类型再写一遍 cv 特化。
+template <typename T>
+struct is_integral<const T> : is_integral<T> {};
 
-template <>  // long long 是整数类型之一。
-struct is_integral<long long> : true_type {};  // long long 判断为 true。
+template <typename T>
+struct is_integral<volatile T> : is_integral<T> {};
 
-template <>  // unsigned long long 是整数类型之一。
-struct is_integral<unsigned long long> : true_type {};  // unsigned long long 判断为 true。
+template <typename T>
+struct is_integral<const volatile T> : is_integral<T> {};
 
-template <typename T>  // T 是去掉 const 后的类型。
-struct is_integral<const T> : is_integral<T> {};  // const 限定不影响是否为整数类型。
-
-template <typename T>  // T 是去掉 volatile 后的类型。
-struct is_integral<volatile T> : is_integral<T> {};  // volatile 限定不影响是否为整数类型。
-
-template <typename T>  // T 是去掉 const volatile 后的类型。
-struct is_integral<const volatile T> : is_integral<T> {};  // const volatile 限定不影响是否为整数类型。
-
-}  // namespace demo::traits  // 自定义 type_traits 命名空间结束。
+}  // namespace demo::traits

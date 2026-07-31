@@ -1,0 +1,19 @@
+# Static analysis for the practice modules. The checks are scoped to the classes of
+# bug this codebase actually risks (lifetime, concurrency, modern-C++ hygiene) rather
+# than the full firehose; the noisiest opinionated checks are disabled so warnings stay
+# actionable. Not run with -warnings-as-errors in CI yet — treat output as advisory.
+Checks: >
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  modernize-*,
+  cppcoreguidelines-*,
+  -modernize-use-trailing-return-type,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-owning-memory,
+  -bugprone-easily-swappable-parameters
+WarningsAsErrors: ''
+HeaderFilterRegex: 'CPP-Practice/.*'
+FormatStyle: file

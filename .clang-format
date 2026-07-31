@@ -1,0 +1,13 @@
+# Shared formatting for the whole repo. Google base with the two deviations the
+# project standardised on: 4-space indent and a 100-column limit (the original
+# sources were written wide). Run `clang-format -i` across CPP-Practice to apply.
+BasedOnStyle: Google
+IndentWidth: 4
+ColumnLimit: 100
+AccessModifierOffset: -3
+DerivePointerAlignment: false
+PointerAlignment: Left
+SortIncludes: true
+IncludeBlocks: Preserve
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse

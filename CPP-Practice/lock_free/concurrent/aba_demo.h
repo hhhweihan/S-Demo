@@ -1,63 +1,65 @@
-#pragma once  // 防止头文件重复包含
+#pragma once
 
-#include <atomic>  // 使用原子变量演示 CAS
-#include <cstdint>  // 使用固定宽度整数
+#include <atomic>
+#include <cstdint>
 
-struct ABAExperimentResult {  // ABA 对比实验结果
-    bool plain_head_cas_succeeded = false;  // 普通头指针 CAS 是否成功
-    bool tagged_head_cas_succeeded = false;  // 带标签头指针 CAS 是否成功
-    std::uint32_t final_plain_value = 0;  // 普通头指针最终值
-    std::uint32_t final_tagged_index = 0;  // 带标签头指针最终索引
-    std::uint32_t final_tagged_tag = 0;  // 带标签头指针最终版本
-};  // 结束结果结构体
+struct ABAExperimentResult {
+    bool plain_head_cas_succeeded = false;
+    bool tagged_head_cas_succeeded = false;
+    std::uint32_t final_plain_value = 0;
+    std::uint32_t final_tagged_index = 0;
+    std::uint32_t final_tagged_tag = 0;
+};
 
-namespace aba_demo {  // ABA 演示命名空间
+namespace aba_demo {
 
-inline std::uint64_t pack(std::uint32_t index, std::uint32_t tag) {  // 打包索引和版本号
-    return (static_cast<std::uint64_t>(tag) << 32U) | index;  // 高 32 位存标签低 32 位存索引
-}  // 结束 pack
+// 把 (index, tag) 挤进一个 64 位字，这样一条 CAS 能同时比较指针和版本号——ABA 防护的核心：
+// 即便 index 兜了一圈回到旧值，tag 已递增，CAS 仍会失败。
+inline std::uint64_t pack(std::uint32_t index, std::uint32_t tag) {
+    return (static_cast<std::uint64_t>(tag) << 32U) | index;
+}
 
-inline std::uint32_t unpack_index(std::uint64_t value) {  // 解包索引字段
-    return static_cast<std::uint32_t>(value & 0xffffffffULL);  // 读取低 32 位
-}  // 结束 unpack_index
+inline std::uint32_t unpack_index(std::uint64_t value) {
+    return static_cast<std::uint32_t>(value & 0xffffffffULL);
+}
 
-inline std::uint32_t unpack_tag(std::uint64_t value) {  // 解包版本字段
-    return static_cast<std::uint32_t>(value >> 32U);  // 读取高 32 位
-}  // 结束 unpack_tag
+inline std::uint32_t unpack_tag(std::uint64_t value) {
+    return static_cast<std::uint32_t>(value >> 32U);
+}
 
-inline ABAExperimentResult run_aba_compare_demo() {  // 运行普通 CAS 与带标签 CAS 对比
-    ABAExperimentResult result;  // 保存实验结果
+// 对照实验：同一个 A->B->A 序列下，裸指针 CAS 被骗成功，带 tag 的 CAS 检测到变化而失败。
+inline ABAExperimentResult run_aba_compare_demo() {
+    ABAExperimentResult result;
 
-    std::atomic<std::uint32_t> plain_head{1};  // 普通头索引从 1 开始
-    std::uint32_t plain_snapshot = plain_head.load(std::memory_order_acquire);  // 记录普通头快照
+    std::atomic<std::uint32_t> plain_head{1};
+    std::uint32_t plain_snapshot = plain_head.load(std::memory_order_acquire);
 
-    plain_head.store(2, std::memory_order_release);  // 模拟头指针跳到其他节点
-    plain_head.store(1, std::memory_order_release);  // 模拟头指针回到旧值
+    // 制造经典 ABA：值离开 1 又回到 1，中间的变化对只看数值的 CAS 不可见。
+    plain_head.store(2, std::memory_order_release);
+    plain_head.store(1, std::memory_order_release);
 
-    result.plain_head_cas_succeeded = plain_head.compare_exchange_strong(  // 尝试用旧快照执行 CAS
-        plain_snapshot,  // 期望值仍是旧头
-        3,  // 新值写成 3
-        std::memory_order_acq_rel,  // 成功时使用获取释放语义
-        std::memory_order_acquire);  // 失败时使用获取语义
-    result.final_plain_value = plain_head.load(std::memory_order_acquire);  // 记录普通头最终值
+    // 旧快照仍等于当前值，CAS 会误判"没人动过"而成功——这就是 ABA 漏洞。
+    result.plain_head_cas_succeeded = plain_head.compare_exchange_strong(
+        plain_snapshot, 3, std::memory_order_acq_rel, std::memory_order_acquire);
+    result.final_plain_value = plain_head.load(std::memory_order_acquire);
 
-    std::atomic<std::uint64_t> tagged_head{pack(1, 0)};  // 带版本标签的头指针
-    std::uint64_t tagged_snapshot = tagged_head.load(std::memory_order_acquire);  // 记录带标签快照
-    std::uint64_t expected = tagged_snapshot;  // CAS 期望值副本
+    std::atomic<std::uint64_t> tagged_head{pack(1, 0)};
+    std::uint64_t tagged_snapshot = tagged_head.load(std::memory_order_acquire);
+    std::uint64_t expected = tagged_snapshot;
 
-    tagged_head.store(pack(2, 1), std::memory_order_release);  // 索引变化并递增标签
-    tagged_head.store(pack(1, 2), std::memory_order_release);  // 索引回到旧值但标签继续变化
+    // 同样让 index 回到 1，但每次写入都递增 tag，破坏"值相同"的假象。
+    tagged_head.store(pack(2, 1), std::memory_order_release);
+    tagged_head.store(pack(1, 2), std::memory_order_release);
 
-    result.tagged_head_cas_succeeded = tagged_head.compare_exchange_strong(  // 带标签快照尝试 CAS
-        expected,  // 期望完整的索引和标签都匹配
-        pack(3, unpack_tag(tagged_snapshot) + 1),  // 准备写入新索引和新标签
-        std::memory_order_acq_rel,  // 成功时使用获取释放语义
-        std::memory_order_acquire);  // 失败时使用获取语义
+    // 期望值带着旧 tag，而当前 tag 已变，CAS 必然失败——ABA 被挡住。
+    result.tagged_head_cas_succeeded =
+        tagged_head.compare_exchange_strong(expected, pack(3, unpack_tag(tagged_snapshot) + 1),
+                                            std::memory_order_acq_rel, std::memory_order_acquire);
 
-    const std::uint64_t tagged_final = tagged_head.load(std::memory_order_acquire);  // 读取带标签最终头
-    result.final_tagged_index = unpack_index(tagged_final);  // 保存最终索引
-    result.final_tagged_tag = unpack_tag(tagged_final);  // 保存最终标签
-    return result;  // 返回实验结果
-}  // 结束 run_aba_compare_demo
+    const std::uint64_t tagged_final = tagged_head.load(std::memory_order_acquire);
+    result.final_tagged_index = unpack_index(tagged_final);
+    result.final_tagged_tag = unpack_tag(tagged_final);
+    return result;
+}
 
-}  // 结束 aba_demo 命名空间
+}  // namespace aba_demo

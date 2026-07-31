@@ -1,16 +1,17 @@
+# Editor / tooling
 .claude/
 .vscode/
-CPP-Practice/**/build*/
-CPP-Practice/memory_pool/build/
-CPP-Practice/memory_pool/build-release/
-CPP-Practice/memory_pool/build-asan/
-CPP-Practice/memory_pool/build-vs/
-CPP-Practice/month1_benchmark/build/
-CPP-Practice/month1_benchmark/build-asan/
-CPP-Practice/raii/build/
-CPP-Practice/raii/*.txt
-CPP-Practice/lock_free/build/
-CPP-Practice/thread_pool/build/
-CPP-Practice/template_traits/build/
-CPP-Practice/template_traits/build-vs/
 
+# Build output — the aggregate root builds into ./build*, and each module can still be
+# built standalone into its own build*/ dir. One generic rule covers both instead of
+# enumerating every module by hand (which silently missed new modules before).
+/build*/
+CPP-Practice/**/build*/
+
+# Stray local artifacts
+CPP-Practice/raii/*.txt
+
+# Compiler/OS junk that historically leaked into Test/ and xuanyuan_webserver/ (archived,
+# not maintained) — keep it out for good instead of re-committing it on every checkout.
+*.o
+.DS_Store

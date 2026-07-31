@@ -1,302 +1,308 @@
-#pragma once  // 防止头文件重复包含
+#pragma once
 
-#include <atomic>  // 使用原子头指针
-#include <cstddef>  // 使用 std::size_t
-#include <memory>  // 使用 shared_ptr 承载数据
-#include <mutex>  // 使用互斥锁保护退休链表
-#include <utility>  // 使用 std::move
-#include <vector>  // 使用数组保存延迟释放节点
+#include <atomic>
+#include <cstddef>
+#include <memory>
+#include <mutex>
+#include <utility>
+#include <vector>
 
-template <typename T>  // 栈元素类型模板
-class LockFreeStack {  // 基础无锁栈实现
-public:  // 公开接口区
-    LockFreeStack() = default;  // 使用默认构造
+// 最简"内存安全"的无锁栈：push/pop 用 CAS 维护栈顶。pop 出来的节点不立即 delete，而是塞进
+// retired_ 延迟到析构统一释放——这样任何还持有旧指针的并发读者都不可能解引用到已释放内存。
+//
+// 关键限制（教学取舍）：retired_ 只增不减，pop/retire_node 一路 push_back，唯一的释放点是析构里
+// 的 clear_retired_nodes()。因此运行期间 retired_ 无界增长，长时间大量 pop 会持续吃内存。这是
+// 刻意的简化：换来"绝不悬垂"的安全性，代价是不回收。生产级实现会用 hazard pointer 或 epoch-based
+// reclamation 做"扫描并释放"，只回收确认无人引用的节点，使 retired_ 保持有界。本文件下方的
+// ReclaimingLockFreeStack 用原子 to_be_deleted_ 链 + try_reclaim 部分解决了这个问题。
+template <typename T>
+class LockFreeStack {
+ public:
+    LockFreeStack() = default;
 
-    ~LockFreeStack() {  // 析构时清理所有节点
-        clear_live_nodes();  // 清理仍在栈中的节点
-        clear_retired_nodes();  // 清理已退休节点
-    }  // 结束析构函数
+    // 析构不与并发访问同步：调用方须保证此时没有其他线程在用栈。
+    ~LockFreeStack() {
+        clear_live_nodes();
+        clear_retired_nodes();
+    }
 
-    LockFreeStack(const LockFreeStack&) = delete;  // 禁止拷贝构造
-    LockFreeStack& operator=(const LockFreeStack&) = delete;  // 禁止拷贝赋值
+    LockFreeStack(const LockFreeStack&) = delete;
+    LockFreeStack& operator=(const LockFreeStack&) = delete;
 
-    void push(T value) {  // 压入一个元素
-        Node* new_node = new Node(std::move(value));  // 分配并初始化新节点
-        new_node->next = head_.load(std::memory_order_relaxed);  // 先指向当前栈顶
-        while (!head_.compare_exchange_weak(new_node->next,  // 循环尝试替换栈顶
-                                            new_node,  // 成功时发布新节点
-                                            std::memory_order_release,  // 成功时释放写入
-                                            std::memory_order_relaxed)) {  // 失败时只需宽松读取
-        }  // CAS 失败时 new_node->next 会被更新为新栈顶
-    }  // 结束 push
+    void push(T value) {
+        Node* new_node = new Node(std::move(value));
+        new_node->next = head_.load(std::memory_order_relaxed);
+        // 成功用 release 发布：保证新节点的构造对随后 acquire 读到它的 pop 可见。
+        while (!head_.compare_exchange_weak(new_node->next, new_node, std::memory_order_release,
+                                            std::memory_order_relaxed)) {
+            // CAS 失败会把 new_node->next 刷新为最新栈顶，直接重试即可。
+        }
+    }
 
-    bool pop(T& out) {  // 尝试弹出一个元素
-        Node* old_head = head_.load(std::memory_order_acquire);  // 读取当前栈顶
-        while (old_head != nullptr &&  // 栈非空时尝试弹出
-               !head_.compare_exchange_weak(old_head,  // 比较当前栈顶
-                                            old_head->next,  // 成功时切到下一个节点
-                                            std::memory_order_acq_rel,  // 成功时获取释放
-                                            std::memory_order_acquire)) {  // 失败时重新获取栈顶
-        }  // CAS 失败时 old_head 会被刷新
+    bool pop(T& out) {
+        Node* old_head = head_.load(std::memory_order_acquire);
+        while (old_head != nullptr &&
+               !head_.compare_exchange_weak(old_head, old_head->next, std::memory_order_acq_rel,
+                                            std::memory_order_acquire)) {
+            // 失败时 old_head 被刷新为新栈顶，继续尝试。
+        }
 
-        if (old_head == nullptr) {  // 检查是否为空栈
-            return false;  // 空栈弹出失败
-        }  // 结束空栈检查
+        if (old_head == nullptr) {
+            return false;
+        }
 
-        out = *old_head->data;  // 拷贝弹出的数据
-        retire_node(old_head);  // 延迟释放弹出的节点
-        return true;  // 弹出成功
-    }  // 结束 pop
+        out = *old_head->data;
+        // 不能在此 delete old_head：别的线程可能仍持有该指针在做 CAS 比较（ABA/悬垂风险）。
+        retire_node(old_head);
+        return true;
+    }
 
-    bool empty() const {  // 判断栈是否为空
-        return head_.load(std::memory_order_acquire) == nullptr;  // 栈顶为空表示空栈
-    }  // 结束 empty
+    bool empty() const { return head_.load(std::memory_order_acquire) == nullptr; }
 
-private:  // 私有实现区
-    struct Node {  // 栈节点结构
-        explicit Node(T value)  // 构造节点并保存数据
-            : data(std::make_shared<T>(std::move(value))) {}  // 数据存入 shared_ptr
+ private:
+    struct Node {
+        explicit Node(T value) : data(std::make_shared<T>(std::move(value))) {}
 
-        std::shared_ptr<T> data;  // 节点保存的数据
-        Node* next = nullptr;  // 指向下一个节点
-    };  // 结束 Node
+        std::shared_ptr<T> data;
+        Node* next = nullptr;
+    };
 
-    void retire_node(Node* node) {  // 将节点加入延迟释放列表
-        std::lock_guard<std::mutex> lock(retired_mutex_);  // 加锁保护退休列表
-        retired_.push_back(node);  // 保存待释放节点
-    }  // 结束 retire_node
+    void retire_node(Node* node) {
+        std::lock_guard<std::mutex> lock(retired_mutex_);
+        retired_.push_back(node);  // 见类注释：只增不减，直到析构
+    }
 
-    void clear_live_nodes() {  // 清空仍在栈中的节点
-        Node* current = head_.exchange(nullptr, std::memory_order_acq_rel);  // 取走整条活动链
-        while (current != nullptr) {  // 遍历活动节点
-            Node* next = current->next;  // 保存后继节点
-            delete current;  // 释放当前节点
-            current = next;  // 前进到下一个节点
-        }  // 结束活动链遍历
-    }  // 结束 clear_live_nodes
+    void clear_live_nodes() {
+        Node* current = head_.exchange(nullptr, std::memory_order_acq_rel);
+        while (current != nullptr) {
+            Node* next = current->next;
+            delete current;
+            current = next;
+        }
+    }
 
-    void clear_retired_nodes() {  // 清空延迟释放节点
-        std::lock_guard<std::mutex> lock(retired_mutex_);  // 加锁保护退休列表
-        for (Node* node : retired_) {  // 遍历待释放节点
-            delete node;  // 释放节点内存
-        }  // 结束退休节点遍历
-        retired_.clear();  // 清空退休列表
-    }  // 结束 clear_retired_nodes
+    void clear_retired_nodes() {
+        std::lock_guard<std::mutex> lock(retired_mutex_);
+        for (Node* node : retired_) {
+            delete node;
+        }
+        retired_.clear();
+    }
 
-    std::atomic<Node*> head_{nullptr};  // 原子栈顶指针
-    std::mutex retired_mutex_;  // 保护退休列表的互斥锁
-    std::vector<Node*> retired_;  // 延迟释放的节点列表
-};  // 结束 LockFreeStack
+    std::atomic<Node*> head_{nullptr};
+    std::mutex retired_mutex_;
+    std::vector<Node*> retired_;  // 延迟释放列表：无界增长，仅析构时清空
+};
 
-template <typename T>  // 栈元素类型模板
-class ReclaimingLockFreeStack {  // 带延迟回收的无锁栈
-public:  // 公开接口区
-    ReclaimingLockFreeStack() = default;  // 使用默认构造
+// 带安全回收的无锁栈：用 threads_in_pop_ 计数 + to_be_deleted_ 原子链实现"没人在 pop 时才回收"。
+// 这是对上面 LockFreeStack 无界 retired_ 的部分改进——节点在运行期就能被释放，而非拖到析构。
+// 局限：高并发下若 pop 区域始终有人，to_be_deleted_ 仍可能积压（退化回近似无界），真正有界需
+// hazard pointer / epoch 方案。
+template <typename T>
+class ReclaimingLockFreeStack {
+ public:
+    ReclaimingLockFreeStack() = default;
 
-    ~ReclaimingLockFreeStack() {  // 析构时清理所有节点
-        clear_live_nodes();  // 清理活动节点
-        delete_nodes(to_be_deleted_.exchange(nullptr, std::memory_order_acq_rel));  // 清理待删除链表
-    }  // 结束析构函数
+    ~ReclaimingLockFreeStack() {
+        clear_live_nodes();
+        delete_nodes(to_be_deleted_.exchange(nullptr, std::memory_order_acq_rel));
+    }
 
-    ReclaimingLockFreeStack(const ReclaimingLockFreeStack&) = delete;  // 禁止拷贝构造
-    ReclaimingLockFreeStack& operator=(const ReclaimingLockFreeStack&) = delete;  // 禁止拷贝赋值
+    ReclaimingLockFreeStack(const ReclaimingLockFreeStack&) = delete;
+    ReclaimingLockFreeStack& operator=(const ReclaimingLockFreeStack&) = delete;
 
-    void push(T value) {  // 压入一个元素
-        Node* new_node = new Node(std::move(value));  // 分配新节点
-        new_node->next = head_.load(std::memory_order_relaxed);  // 指向当前栈顶
-        while (!head_.compare_exchange_weak(new_node->next,  // 循环尝试发布新栈顶
-                                            new_node,  // 成功时写入新节点
-                                            std::memory_order_release,  // 成功时释放数据写入
-                                            std::memory_order_relaxed)) {  // 失败时宽松读取
-        }  // CAS 失败时自动更新 next
-    }  // 结束 push
+    void push(T value) {
+        Node* new_node = new Node(std::move(value));
+        new_node->next = head_.load(std::memory_order_relaxed);
+        while (!head_.compare_exchange_weak(new_node->next, new_node, std::memory_order_release,
+                                            std::memory_order_relaxed)) {
+        }
+    }
 
-    std::shared_ptr<T> pop() {  // 尝试弹出并返回共享数据
-        threads_in_pop_.fetch_add(1, std::memory_order_acq_rel);  // 标记当前线程进入 pop
+    std::shared_ptr<T> pop() {
+        // 进入 pop 前先登记：try_reclaim 靠这个计数判断"是否只有我一个人在 pop"。
+        threads_in_pop_.fetch_add(1, std::memory_order_acq_rel);
 
-        Node* old_head = head_.load(std::memory_order_acquire);  // 读取当前栈顶
-        while (old_head != nullptr &&  // 栈非空时尝试弹出
-               !head_.compare_exchange_weak(old_head,  // 比较栈顶指针
-                                            old_head->next,  // 成功时切到后继节点
-                                            std::memory_order_acq_rel,  // 成功时获取释放
-                                            std::memory_order_acquire)) {  // 失败时获取新栈顶
-        }  // CAS 失败时刷新 old_head
+        Node* old_head = head_.load(std::memory_order_acquire);
+        while (old_head != nullptr &&
+               !head_.compare_exchange_weak(old_head, old_head->next, std::memory_order_acq_rel,
+                                            std::memory_order_acquire)) {
+        }
 
-        std::shared_ptr<T> result;  // 保存弹出的数据
-        if (old_head != nullptr) {  // 只有弹到节点才取数据
-            result.swap(old_head->data);  // 将节点数据转移到结果中
-        }  // 结束数据转移
+        std::shared_ptr<T> result;
+        if (old_head != nullptr) {
+            // swap 而非拷贝：把数据从节点转移出来，节点本身留待 try_reclaim 决定何时删。
+            result.swap(old_head->data);
+        }
 
-        try_reclaim(old_head);  // 尝试安全回收旧节点
-        return result;  // 返回弹出数据或空指针
-    }  // 结束 pop
+        try_reclaim(old_head);
+        return result;
+    }
 
-    bool empty() const {  // 判断栈是否为空
-        return head_.load(std::memory_order_acquire) == nullptr;  // 栈顶为空表示空栈
-    }  // 结束 empty
+    bool empty() const { return head_.load(std::memory_order_acquire) == nullptr; }
 
-private:  // 私有实现区
-    struct Node {  // 栈节点结构
-        explicit Node(T value)  // 构造节点并保存数据
-            : data(std::make_shared<T>(std::move(value))) {}  // 数据存入 shared_ptr
+ private:
+    struct Node {
+        explicit Node(T value) : data(std::make_shared<T>(std::move(value))) {}
 
-        std::shared_ptr<T> data;  // 节点保存的数据
-        Node* next = nullptr;  // 指向下一个节点或待删链表节点
-    };  // 结束 Node
+        std::shared_ptr<T> data;
+        Node* next = nullptr;
+    };
 
-    static void delete_nodes(Node* nodes) {  // 删除一整条节点链
-        while (nodes != nullptr) {  // 遍历链表
-            Node* next = nodes->next;  // 保存后继节点
-            delete nodes;  // 释放当前节点
-            nodes = next;  // 前进到下一个节点
-        }  // 结束链表遍历
-    }  // 结束 delete_nodes
+    static void delete_nodes(Node* nodes) {
+        while (nodes != nullptr) {
+            Node* next = nodes->next;
+            delete nodes;
+            nodes = next;
+        }
+    }
 
-    void chain_pending_nodes(Node* first, Node* last) {  // 将节点链挂到待删除列表
-        last->next = to_be_deleted_.load(std::memory_order_relaxed);  // 让尾节点接上当前待删链
-        while (!to_be_deleted_.compare_exchange_weak(last->next,  // 循环尝试更新待删头
-                                                     first,  // 成功时写入新链头
-                                                     std::memory_order_release,  // 成功时发布链表
-                                                     std::memory_order_relaxed)) {  // 失败时宽松重试
-        }  // CAS 失败时尾节点 next 会被刷新
-    }  // 结束 chain_pending_nodes
+    void chain_pending_nodes(Node* first, Node* last) {
+        last->next = to_be_deleted_.load(std::memory_order_relaxed);
+        // 把 [first..last] 整段无锁地接到 to_be_deleted_ 头部；release 发布链表内容。
+        while (!to_be_deleted_.compare_exchange_weak(last->next, first, std::memory_order_release,
+                                                     std::memory_order_relaxed)) {
+        }
+    }
 
-    void chain_pending_nodes(Node* nodes) {  // 将未知尾节点的链挂起
-        Node* last = nodes;  // 从链头开始寻找尾节点
-        while (last != nullptr && last->next != nullptr) {  // 遍历到链尾
-            last = last->next;  // 前进一个节点
-        }  // 结束尾节点查找
-        if (nodes != nullptr && last != nullptr) {  // 确认链表非空
-            chain_pending_nodes(nodes, last);  // 使用首尾节点挂入待删链
-        }  // 结束非空检查
-    }  // 结束 chain_pending_nodes
+    void chain_pending_nodes(Node* nodes) {
+        Node* last = nodes;
+        while (last != nullptr && last->next != nullptr) {
+            last = last->next;
+        }
+        if (nodes != nullptr && last != nullptr) {
+            chain_pending_nodes(nodes, last);
+        }
+    }
 
-    void chain_pending_node(Node* node) {  // 挂起单个待删节点
-        chain_pending_nodes(node, node);  // 单节点首尾相同
-    }  // 结束 chain_pending_node
+    void chain_pending_node(Node* node) { chain_pending_nodes(node, node); }
 
-    void try_reclaim(Node* old_head) {  // 尝试回收刚弹出的节点
-        if (old_head == nullptr) {  // 没有弹出节点时只退出 pop 区域
-            threads_in_pop_.fetch_sub(1, std::memory_order_acq_rel);  // 减少正在 pop 的线程数
-            return;  // 无节点需要回收
-        }  // 结束空节点检查
+    void try_reclaim(Node* old_head) {
+        if (old_head == nullptr) {
+            threads_in_pop_.fetch_sub(1, std::memory_order_acq_rel);
+            return;
+        }
 
-        if (threads_in_pop_.load(std::memory_order_acquire) == 1) {  // 只有当前线程在 pop 时可回收
-            Node* nodes_to_delete = to_be_deleted_.exchange(nullptr, std::memory_order_acq_rel);  // 取走待删链
-            if (threads_in_pop_.fetch_sub(1, std::memory_order_acq_rel) == 1) {  // 再次确认无人进入 pop
-                delete_nodes(nodes_to_delete);  // 安全删除待删链
-            } else if (nodes_to_delete != nullptr) {  // 若期间有其他 pop 线程进入
-                chain_pending_nodes(nodes_to_delete);  // 重新挂回待删链
-            }  // 结束待删链处理
-            delete old_head;  // 删除当前弹出的节点
-        } else {  // 仍有其他线程可能读取旧节点
-            chain_pending_node(old_head);  // 延迟回收当前节点
-            threads_in_pop_.fetch_sub(1, std::memory_order_acq_rel);  // 离开 pop 区域
-        }  // 结束回收分支
-    }  // 结束 try_reclaim
+        // 只有当前是唯一在 pop 的线程时，回收待删链才安全——否则别人可能正持有其中的指针。
+        if (threads_in_pop_.load(std::memory_order_acquire) == 1) {
+            Node* nodes_to_delete = to_be_deleted_.exchange(nullptr, std::memory_order_acq_rel);
+            // 取走待删链后再次确认仍只有自己：fetch_sub 返回 1 说明期间无人进入，可放心删。
+            if (threads_in_pop_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                delete_nodes(nodes_to_delete);
+            } else if (nodes_to_delete != nullptr) {
+                // 有并发 pop 插进来，别人可能引用这些节点，重新挂回待删链推迟回收。
+                chain_pending_nodes(nodes_to_delete);
+            }
+            delete old_head;  // 当前节点无人再引用（此刻只有自己在 pop），可直接删
+        } else {
+            // 有其他线程在 pop，本节点先挂起，等到某次"独占 pop"时再统一回收。
+            chain_pending_node(old_head);
+            threads_in_pop_.fetch_sub(1, std::memory_order_acq_rel);
+        }
+    }
 
-    void clear_live_nodes() {  // 清理活动链表
-        Node* current = head_.exchange(nullptr, std::memory_order_acq_rel);  // 取走当前栈顶链
-        delete_nodes(current);  // 删除活动链表
-    }  // 结束 clear_live_nodes
+    void clear_live_nodes() {
+        Node* current = head_.exchange(nullptr, std::memory_order_acq_rel);
+        delete_nodes(current);
+    }
 
-    std::atomic<Node*> head_{nullptr};  // 原子栈顶指针
-    std::atomic<unsigned> threads_in_pop_{0};  // 正在执行 pop 的线程计数
-    std::atomic<Node*> to_be_deleted_{nullptr};  // 延迟删除节点链表头
-};  // 结束 ReclaimingLockFreeStack
+    std::atomic<Node*> head_{nullptr};
+    std::atomic<unsigned> threads_in_pop_{0};
+    std::atomic<Node*> to_be_deleted_{nullptr};
+};
 
-template <typename T>  // 栈元素类型模板
-class TaggedPointerStack {  // 带版本标签的无锁栈
-public:  // 公开接口区
-    TaggedPointerStack() = default;  // 使用默认构造
+// 用 (指针, tag) 打包成可原子操作的 Head 来防 ABA：每次改栈顶都递增 tag，即便指针兜圈回到旧值，
+// tag 已变，CAS 仍会失败，从而防止 ABA 误判。
+//
+// 关键限制（同 LockFreeStack）：retired_ 只增不减，唯一释放点是析构里的 clear_retired_nodes()，
+// 运行期间无界增长。tag 解决的是 ABA 正确性，并不解决内存回收——回收仍走"死后统一释放"的简化路径。
+// 生产级实现需搭配 hazard pointer / epoch-based reclamation 做有界扫描回收。
+template <typename T>
+class TaggedPointerStack {
+ public:
+    TaggedPointerStack() = default;
 
-    ~TaggedPointerStack() {  // 析构时清理节点
-        clear_live_nodes();  // 清理活动节点
-        clear_retired_nodes();  // 清理退休节点
-    }  // 结束析构函数
+    ~TaggedPointerStack() {
+        clear_live_nodes();
+        clear_retired_nodes();
+    }
 
-    TaggedPointerStack(const TaggedPointerStack&) = delete;  // 禁止拷贝构造
-    TaggedPointerStack& operator=(const TaggedPointerStack&) = delete;  // 禁止拷贝赋值
+    TaggedPointerStack(const TaggedPointerStack&) = delete;
+    TaggedPointerStack& operator=(const TaggedPointerStack&) = delete;
 
-    void push(T value) {  // 压入一个元素
-        Node* new_node = new Node(std::move(value));  // 分配新节点
-        Head old_head = head_.load(std::memory_order_relaxed);  // 读取旧的带标签栈顶
-        Head new_head{};  // 准备新的带标签栈顶
+    void push(T value) {
+        Node* new_node = new Node(std::move(value));
+        Head old_head = head_.load(std::memory_order_relaxed);
+        Head new_head{};
 
-        do {  // 至少尝试一次 CAS
-            new_node->next = old_head.ptr;  // 新节点接到旧栈顶前
-            new_head.ptr = new_node;  // 新头指向新节点
-            new_head.tag = old_head.tag + 1;  // 版本标签递增
-        } while (!head_.compare_exchange_weak(old_head,  // 比较旧头并更新
-                                              new_head,  // 成功时写入新头
-                                              std::memory_order_release,  // 成功时释放写入
-                                              std::memory_order_relaxed));  // 失败时宽松读取
-    }  // 结束 push
+        do {
+            new_node->next = old_head.ptr;
+            new_head.ptr = new_node;
+            new_head.tag = old_head.tag + 1;  // 每次发布都递增 tag，构成 ABA 防护
+        } while (!head_.compare_exchange_weak(old_head, new_head, std::memory_order_release,
+                                              std::memory_order_relaxed));
+    }
 
-    bool pop(T& out) {  // 尝试弹出一个元素
-        Head old_head = head_.load(std::memory_order_acquire);  // 读取当前带标签栈顶
-        Head new_head{};  // 准备新的带标签栈顶
+    bool pop(T& out) {
+        Head old_head = head_.load(std::memory_order_acquire);
+        Head new_head{};
 
-        while (old_head.ptr != nullptr) {  // 栈非空时持续尝试
-            new_head.ptr = old_head.ptr->next;  // 新头切到后继节点
-            new_head.tag = old_head.tag + 1;  // 版本标签递增
-            if (head_.compare_exchange_weak(old_head,  // 尝试替换带标签头
-                                            new_head,  // 成功时写入新头
-                                            std::memory_order_acq_rel,  // 成功时获取释放
-                                            std::memory_order_acquire)) {  // 失败时获取新头
-                out = *old_head.ptr->data;  // 拷贝弹出数据
-                retire_node(old_head.ptr);  // 延迟释放旧节点
-                return true;  // 弹出成功
-            }  // 结束 CAS 成功分支
-        }  // 结束弹出循环
+        while (old_head.ptr != nullptr) {
+            new_head.ptr = old_head.ptr->next;
+            new_head.tag = old_head.tag + 1;  // 递增 tag：即使 ptr 与某旧值相同也不会误配
+            if (head_.compare_exchange_weak(old_head, new_head, std::memory_order_acq_rel,
+                                            std::memory_order_acquire)) {
+                out = *old_head.ptr->data;
+                retire_node(old_head.ptr);  // 延迟释放，见类注释的无界增长限制
+                return true;
+            }
+        }
 
-        return false;  // 空栈弹出失败
-    }  // 结束 pop
+        return false;
+    }
 
-    bool empty() const {  // 判断栈是否为空
-        return head_.load(std::memory_order_acquire).ptr == nullptr;  // 头指针为空表示空栈
-    }  // 结束 empty
+    bool empty() const { return head_.load(std::memory_order_acquire).ptr == nullptr; }
 
-private:  // 私有实现区
-    struct Node {  // 栈节点结构
-        explicit Node(T value)  // 构造节点并保存数据
-            : data(std::make_shared<T>(std::move(value))) {}  // 数据存入 shared_ptr
+ private:
+    struct Node {
+        explicit Node(T value) : data(std::make_shared<T>(std::move(value))) {}
 
-        std::shared_ptr<T> data;  // 节点保存的数据
-        Node* next = nullptr;  // 指向下一个节点
-    };  // 结束 Node
+        std::shared_ptr<T> data;
+        Node* next = nullptr;
+    };
 
-    struct Head {  // 带标签的栈顶描述
-        Node* ptr = nullptr;  // 栈顶节点指针
-        std::size_t tag = 0;  // ABA 防护版本标签
-    };  // 结束 Head
+    struct Head {
+        Node* ptr = nullptr;
+        std::size_t tag = 0;  // ABA 版本号
+    };
 
-    static_assert(std::is_trivially_copyable<Head>::value, "Head must be trivially copyable");  // 确保 Head 可被原子复制
+    // Head 必须可平凡拷贝，std::atomic<Head> 才能对其做无锁 CAS（否则退化为带锁）。
+    static_assert(std::is_trivially_copyable<Head>::value, "Head must be trivially copyable");
 
-    void retire_node(Node* node) {  // 将节点加入退休列表
-        std::lock_guard<std::mutex> lock(retired_mutex_);  // 加锁保护退休列表
-        retired_.push_back(node);  // 保存待释放节点
-    }  // 结束 retire_node
+    void retire_node(Node* node) {
+        std::lock_guard<std::mutex> lock(retired_mutex_);
+        retired_.push_back(node);  // 只增不减，直到析构
+    }
 
-    void clear_live_nodes() {  // 清理活动节点链
-        Head current = head_.exchange(Head{}, std::memory_order_acq_rel);  // 取走当前带标签头
-        Node* node = current.ptr;  // 获取活动链头节点
-        while (node != nullptr) {  // 遍历活动链
-            Node* next = node->next;  // 保存后继节点
-            delete node;  // 释放当前节点
-            node = next;  // 前进到下一个节点
-        }  // 结束活动链遍历
-    }  // 结束 clear_live_nodes
+    void clear_live_nodes() {
+        Head current = head_.exchange(Head{}, std::memory_order_acq_rel);
+        Node* node = current.ptr;
+        while (node != nullptr) {
+            Node* next = node->next;
+            delete node;
+            node = next;
+        }
+    }
 
-    void clear_retired_nodes() {  // 清理退休节点列表
-        std::lock_guard<std::mutex> lock(retired_mutex_);  // 加锁保护退休列表
-        for (Node* node : retired_) {  // 遍历退休节点
-            delete node;  // 释放节点内存
-        }  // 结束退休节点遍历
-        retired_.clear();  // 清空退休列表
-    }  // 结束 clear_retired_nodes
+    void clear_retired_nodes() {
+        std::lock_guard<std::mutex> lock(retired_mutex_);
+        for (Node* node : retired_) {
+            delete node;
+        }
+        retired_.clear();
+    }
 
-    std::atomic<Head> head_{};  // 原子带标签栈顶
-    std::mutex retired_mutex_;  // 保护退休列表的互斥锁
-    std::vector<Node*> retired_;  // 待延迟释放节点列表
-};  // 结束 TaggedPointerStack
+    std::atomic<Head> head_{};
+    std::mutex retired_mutex_;
+    std::vector<Node*> retired_;  // 延迟释放列表：无界增长，仅析构时清空
+};

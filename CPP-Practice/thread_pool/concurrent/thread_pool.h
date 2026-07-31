@@ -1,308 +1,325 @@
-#pragma once  // 保证头文件只被包含一次
+#pragma once
 
-#include "concurrent/blocking_queue.h"  // 引入阻塞任务队列
-#include "concurrent/countdown_latch.h"  // 引入任务完成计数器
-#include "concurrent/joining_thread.h"  // 引入自动 join 线程包装器
+#include "concurrent/blocking_queue.h"
+#include "concurrent/countdown_latch.h"
+#include "concurrent/joining_thread.h"
 
-#include <atomic>  // 引入原子变量支持
-#include <chrono>  // 引入时间间隔支持
-#if defined(__cpp_concepts)  // 检查是否支持 concepts
-#include <concepts>  // 引入 invocable 约束
-#endif  // 结束 concepts 条件包含
-#include <cstddef>  // 引入 std::size_t
-#include <condition_variable>  // 引入条件变量支持
-#include <exception>  // 引入异常基类
-#include <functional>  // 引入 function 和 bind
-#include <future>  // 引入 future 和 packaged_task
-#include <memory>  // 引入智能指针
-#include <mutex>  // 引入互斥锁支持
-#include <stdexcept>  // 引入标准异常类型
-#include <type_traits>  // 引入返回类型推导工具
-#include <utility>  // 引入移动和转发工具
-#include <vector>  // 引入 worker 容器
+#include <atomic>
+#include <chrono>
+#if defined(__cpp_concepts)
+#include <concepts>
+#endif
+#include <condition_variable>
+#include <cstddef>
+#include <exception>
+#include <functional>
+#include <future>
+#include <memory>
+#include <mutex>
+#include <stdexcept>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
-struct ThreadPoolOptions {  // 定义线程池配置项
-    std::size_t min_threads = 1;  // 最少工作线程数
-    std::size_t max_threads = 1;  // 最多工作线程数
-    std::size_t grow_threshold = 4;  // 触发扩容的队列阈值
-    std::chrono::milliseconds monitor_interval{1000};  // 监控线程检查间隔
-};  // 结束 ThreadPoolOptions 定义
+struct ThreadPoolOptions {
+    std::size_t min_threads = 1;
+    std::size_t max_threads = 1;
+    std::size_t grow_threshold = 4;  // 队列长度超过此值才考虑扩容
+    std::chrono::milliseconds monitor_interval{1000};
+};
 
-class ThreadPool {  // 声明动态线程池
-public:  // 对外公开接口
-    using Task = std::function<void()>;  // 定义无返回任务类型
+// 支持动态扩缩容的线程池。worker 数在 [min_threads, max_threads] 间浮动，由一条后台监控
+// 线程按队列积压情况增减。运行标志用 atomic，其余提交/暂停状态受 state_mutex_ 保护。
+class ThreadPool {
+ public:
+    using Task = std::function<void()>;
 
-    struct Stats {  // 定义线程池快照统计
-        std::size_t submitted = 0;  // 已提交任务数
-        std::size_t completed = 0;  // 已完成任务数
-        std::size_t rejected = 0;  // 已拒绝任务数
-        std::size_t pending = 0;  // 等待完成任务数
-        std::size_t active_workers = 0;  // 当前活跃 worker 数
-        std::size_t target_workers = 0;  // 目标 worker 数
-        std::size_t queue_size = 0;  // 当前队列长度
-        bool accepting = false;  // 是否仍接受提交
-        bool paused = false;  // 是否处于暂停提交状态
-    };  // 结束 Stats 定义
+    struct Stats {
+        std::size_t submitted = 0;
+        std::size_t completed = 0;
+        std::size_t rejected = 0;
+        std::size_t pending = 0;
+        std::size_t active_workers = 0;
+        std::size_t target_workers = 0;
+        std::size_t queue_size = 0;
+        bool accepting = false;
+        bool paused = false;
+    };
 
-    explicit ThreadPool(std::size_t worker_count)  // 使用固定线程数构造
-        : ThreadPool(ThreadPoolOptions{worker_count, worker_count}) {}  // 转发为固定配置
+    explicit ThreadPool(std::size_t worker_count)
+        : ThreadPool(ThreadPoolOptions{worker_count, worker_count}) {}
 
-    explicit ThreadPool(ThreadPoolOptions options)  // 使用完整配置构造
-        : options_(options) {  // 保存线程池配置
-        if (options_.min_threads == 0) {  // 校验最小线程数
-            throw std::invalid_argument("min_threads must be > 0");  // 抛出非法最小线程数
-        }  // 结束最小线程数校验
-        if (options_.max_threads < options_.min_threads) {  // 校验最大线程数不小于最小值
-            throw std::invalid_argument("max_threads must be >= min_threads");  // 抛出非法最大线程数
-        }  // 结束最大线程数校验
+    explicit ThreadPool(ThreadPoolOptions options) : options_(options) {
+        if (options_.min_threads == 0) {
+            throw std::invalid_argument("min_threads must be > 0");
+        }
+        if (options_.max_threads < options_.min_threads) {
+            throw std::invalid_argument("max_threads must be >= min_threads");
+        }
 
-        target_worker_count_.store(options_.min_threads, std::memory_order_relaxed);  // 初始化目标 worker 数
-        for (std::size_t index = 0; index < options_.min_threads; ++index) {  // 创建最小数量 worker
-            spawn_worker();  // 启动一个 worker
-        }  // 结束初始 worker 创建
+        target_worker_count_.store(options_.min_threads, std::memory_order_relaxed);
+        for (std::size_t index = 0; index < options_.min_threads; ++index) {
+            spawn_worker();
+        }
 
-        if (options_.max_threads > options_.min_threads) {  // 需要动态扩缩容时启动监控线程
-            monitor_thread_ = std::make_unique<JoiningThread>([this] { monitor_loop(); });  // 创建监控线程
-        }  // 结束监控线程创建
-    }  // 结束 ThreadPool 构造
+        // 固定大小的池（max==min）无需监控线程，省掉一条常驻线程。
+        if (options_.max_threads > options_.min_threads) {
+            monitor_thread_ = std::make_unique<JoiningThread>([this] { monitor_loop(); });
+        }
+    }
 
-    ~ThreadPool() {  // 析构线程池
-        shutdown();  // 确保线程池关闭
-    }  // 结束析构
+    ~ThreadPool() { shutdown(); }
 
-    ThreadPool(const ThreadPool&) = delete;  // 禁止复制线程池
-    ThreadPool& operator=(const ThreadPool&) = delete;  // 禁止复制赋值线程池
+    ThreadPool(const ThreadPool&) = delete;
+    ThreadPool& operator=(const ThreadPool&) = delete;
 
-    void submit(Task task) {  // 提交无返回任务
-        if (!task) {  // 检查任务是否为空
-            throw std::invalid_argument("empty task is not allowed");  // 拒绝空任务
-        }  // 结束空任务检查
+    void submit(Task task) {
+        // 空 std::function 会被 worker 当作退出哨兵，故禁止用户提交空任务以免误触发退出。
+        if (!task) {
+            throw std::invalid_argument("empty task is not allowed");
+        }
 
-        enqueue_task(std::move(task));  // 入队任务
-    }  // 结束 submit
+        enqueue_task(std::move(task));
+    }
 
-#if defined(__cpp_concepts)  // concepts 可用时启用约束
-    template <typename F, typename... Args>  // 定义带返回值任务模板
-        requires std::invocable<F, Args...>  // 约束可调用对象
-#else  // concepts 不可用时使用普通模板
-    template <typename F, typename... Args>  // 定义带返回值任务模板
-#endif  // 结束 submit 模板条件编译
-    auto submit(F&& func, Args&&... args)  // 提交可调用对象和参数
-        -> std::future<std::invoke_result_t<F, Args...>> {  // 返回任务 future
-        using RetType = std::invoke_result_t<F, Args...>;  // 推导任务返回类型
+#if defined(__cpp_concepts)
+    template <typename F, typename... Args>
+        requires std::invocable<F, Args...>
+#else
+    template <typename F, typename... Args>
+#endif
+    auto submit(F&& func, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>> {
+        using RetType = std::invoke_result_t<F, Args...>;
 
-        auto packaged_task = std::make_shared<std::packaged_task<RetType()>>(  // 创建共享 packaged_task
-            std::bind(std::forward<F>(func), std::forward<Args>(args)...));  // 绑定函数和参数
-        std::future<RetType> future = packaged_task->get_future();  // 取得返回值 future
+        // packaged_task 放进 shared_ptr：Task 是 std::function 要求可拷贝，而 packaged_task
+        // 只可移动，用 shared_ptr 包一层才能塞进队列。
+        auto packaged_task = std::make_shared<std::packaged_task<RetType()>>(
+            std::bind(std::forward<F>(func), std::forward<Args>(args)...));
+        std::future<RetType> future = packaged_task->get_future();
 
-        enqueue_task([packaged_task]() { (*packaged_task)(); });  // 将 packaged_task 包装为无参任务
-        return future;  // 返回 future 给调用方
-    }  // 结束带返回值 submit
+        enqueue_task([packaged_task]() { (*packaged_task)(); });
+        return future;
+    }
 
-    void await_termination() {  // 等待所有已提交任务完成并关闭
-        pending_latch_.wait();  // 等待待完成任务归零
-        shutdown();  // 关闭线程池
-    }  // 结束 await_termination
+    void await_termination() {
+        // 先等在途任务全部完成，再关闭——保证已提交的任务不被丢弃。
+        pending_latch_.wait();
+        shutdown();
+    }
 
-    void pause() {  // 暂停新任务提交入队
-        std::lock_guard<std::mutex> lock(state_mutex_);  // 加锁修改状态
-        if (accepting_) {  // 仅在仍接受任务时暂停
-            paused_ = true;  // 设置暂停标志
-        }  // 结束接受状态检查
-    }  // 结束 pause
+    void pause() {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (accepting_) {
+            paused_ = true;
+        }
+    }
 
-    void resume() {  // 恢复新任务提交入队
-        {  // 限定状态锁作用域
-            std::lock_guard<std::mutex> lock(state_mutex_);  // 加锁修改暂停状态
-            paused_ = false;  // 清除暂停标志
-        }  // 释放状态锁
-        pause_cv_.notify_all();  // 唤醒等待提交的线程
-    }  // 结束 resume
+    void resume() {
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            paused_ = false;
+        }
+        pause_cv_.notify_all();
+    }
 
-    void shutdown() {  // 关闭线程池
-        bool expected = true;  // 准备从运行态切换
-        if (!running_.compare_exchange_strong(expected, false, std::memory_order_acq_rel)) {  // 确保只关闭一次
-            return;  // 已关闭则直接返回
-        }  // 结束关闭一次性检查
+    void shutdown() {
+        // CAS 保证关闭逻辑只执行一次（析构和 await_termination 都可能调用）。
+        bool expected = true;
+        if (!running_.compare_exchange_strong(expected, false, std::memory_order_acq_rel)) {
+            return;
+        }
 
-        {  // 限定状态锁作用域
-            std::lock_guard<std::mutex> lock(state_mutex_);  // 加锁修改提交状态
-            accepting_ = false;  // 停止接受新任务
-            paused_ = false;  // 清除暂停状态
-        }  // 释放状态锁
-        pause_cv_.notify_all();  // 唤醒所有暂停提交者
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            accepting_ = false;
+            paused_ = false;
+        }
+        // 唤醒卡在 pause 等待里的提交者，让它们观察到 running_=false 后抛出而非死等。
+        pause_cv_.notify_all();
 
-        if (monitor_thread_ != nullptr) {  // 存在监控线程时回收
-            monitor_thread_->join();  // 等待监控线程退出
-            monitor_thread_.reset();  // 释放监控线程对象
-        }  // 结束监控线程回收
+        if (monitor_thread_ != nullptr) {
+            monitor_thread_->join();
+            monitor_thread_.reset();
+        }
 
-        std::size_t worker_slots = 0;  // 记录需要退出的 worker 数
-        {  // 限定 worker 锁作用域
-            std::lock_guard<std::mutex> lock(workers_mutex_);  // 加锁读取 worker 容器
-            worker_slots = workers_.size();  // 保存当前 worker 数
-        }  // 释放 worker 锁
+        std::size_t worker_slots = 0;
+        {
+            std::lock_guard<std::mutex> lock(workers_mutex_);
+            worker_slots = workers_.size();
+        }
 
-        request_worker_exit(worker_slots);  // 投递 worker 退出令牌
-        queue_.shutdown();  // 关闭任务队列唤醒阻塞 worker
+        // 给每个 worker 投一个退出哨兵，再关闭队列唤醒阻塞在 pop 上的 worker。
+        request_worker_exit(worker_slots);
+        queue_.shutdown();
 
-        std::lock_guard<std::mutex> lock(workers_mutex_);  // 加锁清理 worker 容器
-        workers_.clear();  // 销毁并 join 所有 worker
-    }  // 结束 shutdown
+        std::lock_guard<std::mutex> lock(workers_mutex_);
+        workers_.clear();  // JoiningThread 析构会 join 每个 worker
+    }
 
-    Stats snapshot_stats() const {  // 获取线程池统计快照
-        std::lock_guard<std::mutex> lock(state_mutex_);  // 加锁读取状态标志
-        return Stats{submitted_tasks_.load(std::memory_order_relaxed),  // 填充提交数量
-                     completed_tasks_.load(std::memory_order_relaxed),  // 填充完成数量
-                     rejected_tasks_.load(std::memory_order_relaxed),  // 填充拒绝数量
-                     pending_tasks_.load(std::memory_order_relaxed),  // 填充待完成数量
-                     active_count_.load(std::memory_order_relaxed),  // 填充活跃 worker 数
-                     target_worker_count_.load(std::memory_order_relaxed),  // 填充目标 worker 数
-                     queue_.size(),  // 填充队列长度
-                     accepting_,  // 填充接受状态
-                     paused_};  // 填充暂停状态
-    }  // 结束 snapshot_stats
+    Stats snapshot_stats() const {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        return Stats{submitted_tasks_.load(std::memory_order_relaxed),
+                     completed_tasks_.load(std::memory_order_relaxed),
+                     rejected_tasks_.load(std::memory_order_relaxed),
+                     pending_tasks_.load(std::memory_order_relaxed),
+                     active_count_.load(std::memory_order_relaxed),
+                     target_worker_count_.load(std::memory_order_relaxed),
+                     queue_.size(),
+                     accepting_,
+                     paused_};
+    }
 
-private:  // 内部实现细节
-    void enqueue_task(Task task) {  // 将任务安全加入队列
-        {  // 限定状态锁作用域
-            std::unique_lock<std::mutex> lock(state_mutex_);  // 获取可等待状态锁
-            pause_cv_.wait(lock, [this] {  // 等待暂停状态解除或线程池停止
-                return !paused_ || !accepting_ || !running_.load(std::memory_order_acquire);  // 提交可继续的条件
-            });  // 结束暂停等待
+ private:
+    void enqueue_task(Task task) {
+        {
+            std::unique_lock<std::mutex> lock(state_mutex_);
+            // 暂停时阻塞在这里；关闭或停止接受时也醒来，走下面的拒绝路径而非永久挂起。
+            pause_cv_.wait(lock, [this] {
+                return !paused_ || !accepting_ || !running_.load(std::memory_order_acquire);
+            });
 
-            if (!accepting_ || !running_.load(std::memory_order_acquire)) {  // 停止状态拒绝提交
-                rejected_tasks_.fetch_add(1, std::memory_order_relaxed);  // 统计拒绝任务
-                throw std::runtime_error("submit on stopped ThreadPool");  // 抛出停止提交异常
-            }  // 结束停止状态检查
+            if (!accepting_ || !running_.load(std::memory_order_acquire)) {
+                rejected_tasks_.fetch_add(1, std::memory_order_relaxed);
+                throw std::runtime_error("submit on stopped ThreadPool");
+            }
 
-            submitted_tasks_.fetch_add(1, std::memory_order_relaxed);  // 增加提交计数
-            pending_tasks_.fetch_add(1, std::memory_order_relaxed);  // 增加待完成计数
-            pending_latch_.count_up();  // 增加完成等待计数
-        }  // 释放状态锁
+            // 计数必须在锁内、入队前就加：否则任务可能先被 worker 执行完再来减，导致下溢。
+            submitted_tasks_.fetch_add(1, std::memory_order_relaxed);
+            pending_tasks_.fetch_add(1, std::memory_order_relaxed);
+            pending_latch_.count_up();
+        }
 
-        try {  // 尝试把任务写入队列
-            queue_.push(std::move(task));  // 移动任务进入阻塞队列
-        } catch (...) {  // 入队失败时回滚计数
-            pending_tasks_.fetch_sub(1, std::memory_order_relaxed);  // 回退待完成计数
-            pending_latch_.count_down();  // 回退 latch 计数
-            rejected_tasks_.fetch_add(1, std::memory_order_relaxed);  // 统计拒绝任务
-            throw;  // 保留原异常继续抛出
-        }  // 结束入队异常处理
-    }  // 结束 enqueue_task
+        try {
+            queue_.push(std::move(task));
+        } catch (...) {
+            // 入队失败要回滚上面预加的计数，否则 pending 永远不归零、await 会死等。
+            pending_tasks_.fetch_sub(1, std::memory_order_relaxed);
+            pending_latch_.count_down();
+            rejected_tasks_.fetch_add(1, std::memory_order_relaxed);
+            throw;
+        }
+    }
 
-    void spawn_worker() {  // 创建一个 worker 线程
-        std::lock_guard<std::mutex> lock(workers_mutex_);  // 加锁修改 worker 容器
-        workers_.emplace_back([this] { worker_loop(); });  // 启动执行 worker_loop 的线程
-    }  // 结束 spawn_worker
+    void spawn_worker() {
+        std::lock_guard<std::mutex> lock(workers_mutex_);
+        workers_.emplace_back([this] { worker_loop(); });
+    }
 
-    void request_worker_exit(std::size_t count) {  // 请求指定数量 worker 退出
-        if (count == 0) {  // 无需退出任何 worker
-            return;  // 直接返回
-        }  // 结束数量检查
+    void request_worker_exit(std::size_t count) {
+        if (count == 0) {
+            return;
+        }
 
-        worker_exit_tokens_.fetch_add(count, std::memory_order_release);  // 增加退出令牌数
-        for (std::size_t index = 0; index < count; ++index) {  // 为每个退出请求投递哨兵任务
-            queue_.push(Task{});  // 空任务作为 worker 唤醒信号
-        }  // 结束退出哨兵投递
-    }  // 结束 request_worker_exit
+        // 令牌数与哨兵一一对应：worker 拿到空任务后需消费一个令牌才真正退出，
+        // 这样缩容只退指定数量，避免哨兵被"路过"的 worker 误吞导致退多退少。
+        worker_exit_tokens_.fetch_add(count, std::memory_order_release);
+        for (std::size_t index = 0; index < count; ++index) {
+            queue_.push(Task{});  // 空任务即退出哨兵
+        }
+    }
 
-    bool try_consume_exit_token() {  // 尝试消费一个退出令牌
-        std::size_t current = worker_exit_tokens_.load(std::memory_order_acquire);  // 读取当前令牌数
-        while (current > 0) {  // 有令牌时尝试扣减
-            if (worker_exit_tokens_.compare_exchange_weak(current,  // 比较并更新令牌数
-                                                          current - 1,  // 目标令牌数减一
-                                                          std::memory_order_acq_rel,  // 成功时同步退出请求
-                                                          std::memory_order_acquire)) {  // 失败时重新读取
-                return true;  // 成功消费退出令牌
-            }  // 结束 CAS 成功检查
-        }  // 结束令牌消费循环
-        return false;  // 没有可消费令牌
-    }  // 结束 try_consume_exit_token
+    bool try_consume_exit_token() {
+        std::size_t current = worker_exit_tokens_.load(std::memory_order_acquire);
+        while (current > 0) {
+            // CAS 循环保证同一个令牌只被一个 worker 领走。
+            if (worker_exit_tokens_.compare_exchange_weak(
+                    current, current - 1, std::memory_order_acq_rel, std::memory_order_acquire)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-    void worker_loop() {  // worker 主循环
-        active_count_.fetch_add(1, std::memory_order_relaxed);  // 记录一个活跃 worker
+    void worker_loop() {
+        active_count_.fetch_add(1, std::memory_order_relaxed);
 
-        while (true) {  // 持续处理任务直到退出
-            Task task;  // 保存本轮取出的任务
-            try {  // 尝试从队列获取任务
-                task = queue_.pop();  // 阻塞等待任务
-            } catch (const std::exception&) {  // 队列关闭时退出循环
-                break;  // 结束 worker 主循环
-            }  // 结束取任务异常处理
+        while (true) {
+            Task task;
+            try {
+                task = queue_.pop();
+            } catch (const std::exception&) {
+                break;  // 队列已 shutdown，无更多任务
+            }
 
-            if (!task) {  // 空任务表示可能需要退出
-                if (!running_.load(std::memory_order_acquire) || try_consume_exit_token()) {  // 关闭或拿到退出令牌时退出
-                    break;  // 结束 worker 主循环
-                }  // 结束退出条件检查
-                continue;  // 否则忽略哨兵继续取任务
-            }  // 结束空任务处理
+            if (!task) {
+                // 收到哨兵：整池关闭则直接退；否则只在抢到退出令牌时退（缩容），
+                // 抢不到说明这个哨兵不是给自己的，继续干活。
+                if (!running_.load(std::memory_order_acquire) || try_consume_exit_token()) {
+                    break;
+                }
+                continue;
+            }
 
-            try {  // 执行用户任务
-                task();  // 调用任务函数
-            } catch (...) {  // 捕获用户任务异常
+            try {
+                task();
+            } catch (...) {
                 // 用户任务异常不终止 worker；packaged_task 会自行持有异常。
-            }  // 结束任务异常处理
+            }
 
-            const std::size_t remaining =  // 计算执行后剩余待完成任务
-                pending_tasks_.fetch_sub(1, std::memory_order_acq_rel) - 1;  // 扣减待完成计数
-            completed_tasks_.fetch_add(1, std::memory_order_relaxed);  // 增加完成计数
-            pending_latch_.count_down();  // 通知一个任务完成
-            if (remaining == 0) {  // 所有任务完成时通知等待者
-                std::lock_guard<std::mutex> lock(completion_mutex_);  // 加锁配合完成条件变量
-                completion_cv_.notify_all();  // 唤醒完成等待者
-            }  // 结束完成通知
-        }  // 结束 worker 主循环
+            // fetch_sub 用 acq_rel 与 enqueue 的计数发布同步；用返回的旧值算出剩余量，
+            // 剩余为 0 时才发完成通知，避免每个任务都抢 completion 锁。
+            const std::size_t remaining =
+                pending_tasks_.fetch_sub(1, std::memory_order_acq_rel) - 1;
+            completed_tasks_.fetch_add(1, std::memory_order_relaxed);
+            pending_latch_.count_down();
+            if (remaining == 0) {
+                std::lock_guard<std::mutex> lock(completion_mutex_);
+                completion_cv_.notify_all();
+            }
+        }
 
-        active_count_.fetch_sub(1, std::memory_order_relaxed);  // 记录 worker 退出
-    }  // 结束 worker_loop
+        active_count_.fetch_sub(1, std::memory_order_relaxed);
+    }
 
-    void monitor_loop() {  // 动态扩缩容监控循环
-        while (running_.load(std::memory_order_acquire)) {  // 在线程池运行时循环
-            std::this_thread::sleep_for(options_.monitor_interval);  // 按配置间隔休眠
+    void monitor_loop() {
+        while (running_.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(options_.monitor_interval);
 
-            if (!running_.load(std::memory_order_acquire)) {  // 休眠后再次检查运行状态
-                break;  // 关闭时退出监控循环
-            }  // 结束运行状态检查
+            // 睡醒后复查：关闭可能发生在休眠期间。
+            if (!running_.load(std::memory_order_acquire)) {
+                break;
+            }
 
-            const std::size_t queue_size = queue_.size();  // 获取当前队列长度
-            const std::size_t active_workers = active_count_.load(std::memory_order_acquire);  // 获取活跃 worker 数
-            const std::size_t target_workers = target_worker_count_.load(std::memory_order_acquire);  // 获取目标 worker 数
+            const std::size_t queue_size = queue_.size();
+            const std::size_t active_workers = active_count_.load(std::memory_order_acquire);
+            const std::size_t target_workers = target_worker_count_.load(std::memory_order_acquire);
 
-            if (queue_size > options_.grow_threshold && target_workers < options_.max_threads) {  // 队列积压且未达上限时扩容
-                target_worker_count_.fetch_add(1, std::memory_order_relaxed);  // 增加目标 worker 数
-                spawn_worker();  // 新建一个 worker
-                continue;  // 进入下一轮监控
-            }  // 结束扩容判断
+            // 扩容：积压超阈值且未达上限。每轮只加一个，平滑响应而非一次性暴涨。
+            if (queue_size > options_.grow_threshold && target_workers < options_.max_threads) {
+                target_worker_count_.fetch_add(1, std::memory_order_relaxed);
+                spawn_worker();
+                continue;
+            }
 
-            if (queue_size == 0 && active_workers > options_.min_threads &&  // 队列为空且活跃线程超过下限
-                target_workers > options_.min_threads) {  // 目标线程数也超过下限
-                target_worker_count_.fetch_sub(1, std::memory_order_relaxed);  // 降低目标 worker 数
-                request_worker_exit(1);  // 请求一个 worker 退出
-            }  // 结束缩容判断
-        }  // 结束监控循环
-    }  // 结束 monitor_loop
+            // 缩容：队列空且活跃/目标都高于下限时退掉一个，回收空闲线程。
+            if (queue_size == 0 && active_workers > options_.min_threads &&
+                target_workers > options_.min_threads) {
+                target_worker_count_.fetch_sub(1, std::memory_order_relaxed);
+                request_worker_exit(1);
+            }
+        }
+    }
 
-    mutable std::mutex state_mutex_;  // 保护提交和暂停状态
-    mutable std::mutex workers_mutex_;  // 保护 worker 容器
-    mutable std::mutex completion_mutex_;  // 配合完成通知使用
-    std::condition_variable completion_cv_;  // 所有任务完成的通知条件变量
-    std::condition_variable pause_cv_;  // 暂停和恢复提交的条件变量
+    mutable std::mutex state_mutex_;
+    mutable std::mutex workers_mutex_;
+    mutable std::mutex completion_mutex_;
+    std::condition_variable completion_cv_;
+    std::condition_variable pause_cv_;
 
-    ThreadPoolOptions options_;  // 保存线程池配置
-    std::vector<JoiningThread> workers_;  // 保存 worker 线程集合
-    std::unique_ptr<JoiningThread> monitor_thread_;  // 保存动态监控线程
-    BlockingQueue<Task> queue_;  // 保存待执行任务队列
-    CountDownLatch pending_latch_{0};  // 跟踪待完成任务数量
+    ThreadPoolOptions options_;
+    std::vector<JoiningThread> workers_;
+    std::unique_ptr<JoiningThread> monitor_thread_;
+    BlockingQueue<Task> queue_;
+    CountDownLatch pending_latch_{0};
 
-    std::atomic<bool> running_{true};  // 标记线程池是否运行
-    bool accepting_ = true;  // 标记是否接受新任务
-    bool paused_ = false;  // 标记是否暂停提交
-    std::atomic<std::size_t> active_count_{0};  // 当前活跃 worker 数
-    std::atomic<std::size_t> target_worker_count_{0};  // 当前目标 worker 数
-    std::atomic<std::size_t> worker_exit_tokens_{0};  // 待消费的 worker 退出令牌
-    std::atomic<std::size_t> submitted_tasks_{0};  // 累计提交任务数
-    std::atomic<std::size_t> completed_tasks_{0};  // 累计完成任务数
-    std::atomic<std::size_t> rejected_tasks_{0};  // 累计拒绝任务数
-    std::atomic<std::size_t> pending_tasks_{0};  // 当前待完成任务数
-};  // 结束 ThreadPool 定义
+    std::atomic<bool> running_{true};
+    bool accepting_ = true;  // 受 state_mutex_ 保护
+    bool paused_ = false;    // 受 state_mutex_ 保护
+    std::atomic<std::size_t> active_count_{0};
+    std::atomic<std::size_t> target_worker_count_{0};
+    std::atomic<std::size_t> worker_exit_tokens_{0};
+    std::atomic<std::size_t> submitted_tasks_{0};
+    std::atomic<std::size_t> completed_tasks_{0};
+    std::atomic<std::size_t> rejected_tasks_{0};
+    std::atomic<std::size_t> pending_tasks_{0};
+};

@@ -2,9 +2,9 @@
 
 > 学习范围：Week 05 - Week 08  
 > 主题主线：BlockingQueue、ThreadPool、Lock-Free、同步原语复盘  
-> 代码落点： [CPP-Practice/thread_pool](CPP-Practice/thread_pool) 、 [CPP-Practice/lock_free](CPP-Practice/lock_free)
+> 代码落点： [CPP-Practice/thread_pool](../../CPP-Practice/thread_pool) 、 [CPP-Practice/lock_free](../../CPP-Practice/lock_free)
 
-补充周复盘： [Note/C++-Note/Week05-阻塞队列-复盘总结.md](Note/C++-Note/Week05-阻塞队列-复盘总结.md) 、 [Note/C++-Note/Week06-线程池-复盘总结.md](Note/C++-Note/Week06-线程池-复盘总结.md) 、 [Note/C++-Note/Week07-无锁编程-复盘总结.md](Note/C++-Note/Week07-无锁编程-复盘总结.md) 、 [Note/C++-Note/Week08-同步原语与整月复盘总结.md](Note/C++-Note/Week08-同步原语与整月复盘总结.md)
+补充周复盘： [Note/C++-Note/Week05-阻塞队列-复盘总结.md](Week05-阻塞队列-复盘总结.md) 、 [Note/C++-Note/Week06-线程池-复盘总结.md](Week06-线程池-复盘总结.md) 、 [Note/C++-Note/Week07-无锁编程-复盘总结.md](Week07-无锁编程-复盘总结.md) 、 [Note/C++-Note/Week08-同步原语与整月复盘总结.md](Week08-同步原语与整月复盘总结.md)
 
 ---
 

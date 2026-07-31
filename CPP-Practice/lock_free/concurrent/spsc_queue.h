@@ -1,57 +1,65 @@
-#pragma once  // 防止头文件重复包含
+#pragma once
 
-#include <atomic>  // 使用原子读写索引
-#include <cstddef>  // 使用 std::size_t
-#include <optional>  // 使用可空槽位保存元素
-#include <utility>  // 使用 std::move
-#include <vector>  // 使用连续缓冲区
+#include <atomic>
+#include <cstddef>
+#include <optional>
+#include <utility>
+#include <vector>
 
-template <typename T>  // 队列元素类型模板
-class SPSCQueue {  // 单生产者单消费者无锁环形队列
-public:  // 公开接口区
-    explicit SPSCQueue(std::size_t capacity)  // 构造指定有效容量
-        : capacity_(capacity + 1),  // 预留一个空槽区分满和空
-          buffer_(capacity_) {}  // 初始化环形缓冲区
+// 单生产者单消费者无锁环形队列。正确性前提：只有一个线程调用 push、一个线程调用 pop。
+// 生产者独占 tail_、消费者独占 head_，跨线程只通过这两个索引的 acquire/release 同步，
+// 因此无需 CAS 或锁。多生产者或多消费者会破坏该假设，行为未定义。
+template <typename T>
+class SPSCQueue {
+ public:
+    explicit SPSCQueue(std::size_t capacity)
+        // 多留一个空槽：满(tail 追到 head 前一格)与空(tail==head)才能区分，否则两者都是
+        // head==tail。
+        : capacity_(capacity + 1), buffer_(capacity_) {}
 
-    bool push(T value) {  // 尝试写入一个元素
-        const std::size_t tail = tail_.load(std::memory_order_relaxed);  // 读取当前写索引
-        const std::size_t next = increment(tail);  // 计算写入后的索引
-        if (next == head_.load(std::memory_order_acquire)) {  // 检查队列是否已满
-            return false;  // 满队列时写入失败
-        }  // 结束满队列判断
+    bool push(T value) {
+        const std::size_t tail = tail_.load(std::memory_order_relaxed);  // 本线程独占，relaxed 足够
+        const std::size_t next = increment(tail);
+        // acquire 读 head_：与消费者对 head_ 的 release 配对，确保看到它已腾空的槽位。
+        if (next == head_.load(std::memory_order_acquire)) {
+            return false;  // 满
+        }
 
-        buffer_[tail] = std::move(value);  // 将元素移动到当前槽位
-        tail_.store(next, std::memory_order_release);  // 发布新的写索引
-        return true;  // 写入成功
-    }  // 结束 push
+        buffer_[tail] = std::move(value);
+        // release 发布 tail_：保证上面的槽位写入对消费者的 acquire 可见（先写数据后发布索引）。
+        tail_.store(next, std::memory_order_release);
+        return true;
+    }
 
-    bool pop(T& out) {  // 尝试弹出一个元素
-        const std::size_t head = head_.load(std::memory_order_relaxed);  // 读取当前读索引
-        if (head == tail_.load(std::memory_order_acquire)) {  // 检查队列是否为空
-            return false;  // 空队列时弹出失败
-        }  // 结束空队列判断
+    bool pop(T& out) {
+        const std::size_t head = head_.load(std::memory_order_relaxed);  // 本线程独占
+        // acquire 读 tail_：与生产者 release 配对，读到 tail_ 的新值即意味着对应槽位数据已就绪。
+        if (head == tail_.load(std::memory_order_acquire)) {
+            return false;  // 空
+        }
 
-        out = std::move(*buffer_[head]);  // 移出当前槽位元素
-        buffer_[head].reset();  // 清空已消费槽位
-        head_.store(increment(head), std::memory_order_release);  // 发布新的读索引
-        return true;  // 弹出成功
-    }  // 结束 pop
+        out = std::move(*buffer_[head]);
+        buffer_[head].reset();
+        // release 发布 head_：让生产者的 acquire 看到该槽位已释放，可安全复用。
+        head_.store(increment(head), std::memory_order_release);
+        return true;
+    }
 
-    bool empty() const {  // 判断队列是否为空
-        return head_.load(std::memory_order_acquire) == tail_.load(std::memory_order_acquire);  // 读写索引相等表示空
-    }  // 结束 empty
+    bool empty() const {
+        return head_.load(std::memory_order_acquire) == tail_.load(std::memory_order_acquire);
+    }
 
-    std::size_t capacity() const {  // 返回用户可用容量
-        return capacity_ - 1;  // 扣除哨兵空槽
-    }  // 结束 capacity
+    std::size_t capacity() const {
+        return capacity_ - 1;  // 扣掉那个哨兵空槽
+    }
 
-private:  // 私有实现区
-    std::size_t increment(std::size_t index) const {  // 计算环形后继索引
-        return (index + 1) % capacity_;  // 按容量取模回绕
-    }  // 结束 increment
+ private:
+    std::size_t increment(std::size_t index) const { return (index + 1) % capacity_; }
 
-    const std::size_t capacity_;  // 包含哨兵槽的实际容量
-    std::vector<std::optional<T>> buffer_;  // 环形存储槽数组
-    alignas(64) std::atomic<std::size_t> head_{0};  // 缓存行对齐的读索引
-    alignas(64) std::atomic<std::size_t> tail_{0};  // 缓存行对齐的写索引
-};  // 结束 SPSCQueue
+    const std::size_t capacity_;
+    std::vector<std::optional<T>> buffer_;
+    // head_ 与 tail_ 各占一条 cache line：否则两个高频写的索引落在同一行会 false sharing，
+    // 生产者和消费者的写互相使对方 cache 失效，吞吐骤降。
+    alignas(64) std::atomic<std::size_t> head_{0};
+    alignas(64) std::atomic<std::size_t> tail_{0};
+};

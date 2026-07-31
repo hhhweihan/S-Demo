@@ -2,7 +2,7 @@
 
 > **学习周期：** Day-050 ~ Day-056（约 7 小时）  
 > **核心主题：** RWMutex、CountDownLatch、ThreadPool pause/resume、await_termination、TSan 环境检查、整月 benchmark、Month 03 规划  
-> **代码落点：** [CPP-Practice/thread_pool](CPP-Practice/thread_pool)  
+> **代码落点：** [CPP-Practice/thread_pool](../../CPP-Practice/thread_pool)  
 > **完成状态：** 本周同步原语实现、线程池整合、压力测试、benchmark 和复盘文档已落地；TSan 在当前 Windows 环境下受工具链限制，已明确记录后续验证路径
 
 ---

@@ -2,7 +2,7 @@
 
 > **学习周期：** Day-043 ~ Day-049（约 7 小时）  
 > **核心主题：** `memory_order`、release/acquire、LockFreeStack、ABA、tagged pointer、SPSCQueue、性能取舍  
-> **代码落点：** `CPP-Learning-Plan/Month-02-并发编程/Week-07-LockFree/`；当前以学习记录与设计复盘为主，代码实验与 benchmark 建议在并发练习目录继续补齐  
+> **代码落点：** `CPP-Learning-Plan/02-并发编程/07-LockFree/`；当前以学习记录与设计复盘为主，代码实验与 benchmark 建议在并发练习目录继续补齐  
 > **完成状态：** 本周学习文档、逐日总结、周复盘与打卡已完成；SPSC 实测、TSan 验证和基准测试结论仍建议后续用代码落地确认
 
 ---

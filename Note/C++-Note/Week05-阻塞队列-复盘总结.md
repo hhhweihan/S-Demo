@@ -2,7 +2,7 @@
 
 > **学习周期：** Day-029 ~ Day-035（约 7 小时）  
 > **核心主题：** `JoiningThread`、`BlockingQueue`、`BoundedQueue`、生产者消费者测试、benchmark、MPMCQueue 阅读预热  
-> **代码落点：** `CPP-Learning-Plan/Month-02-并发编程/Week-05-BlockingQueue/`；后续实现建议统一落到并发练习目录  
+> **代码落点：** `CPP-Learning-Plan/02-并发编程/05-BlockingQueue/`；后续实现建议统一落到并发练习目录  
 > **完成状态：** 本周学习计划、设计说明、测试标准与复盘模板已补齐；具体代码实现与实测数据需按文档继续落地
 
 ---

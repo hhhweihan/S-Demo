@@ -1,52 +1,46 @@
-#pragma once  // 保证头文件只被包含一次
+#pragma once
 
-#include <thread>  // 引入 std::thread
-#include <utility>  // 引入移动和转发工具
+#include <thread>
+#include <utility>
 
-class JoiningThread {  // 声明自动 join 的线程包装器
-public:  // 对外公开线程包装接口
-    JoiningThread() noexcept = default;  // 默认构造空线程
+// RAII 线程包装（相当于 std::jthread 的简化版）：析构自动 join，避免可 join 的线程被销毁
+// 时触发 std::terminate。只可移动不可拷贝——线程所有权是独占的。
+class JoiningThread {
+ public:
+    JoiningThread() noexcept = default;
 
-    template <typename F, typename... Args>  // 接受任意可调用对象和参数
-    explicit JoiningThread(F&& func, Args&&... args)  // 构造并启动线程
-        : thread_(std::forward<F>(func), std::forward<Args>(args)...) {}  // 完美转发到 std::thread
+    template <typename F, typename... Args>
+    explicit JoiningThread(F&& func, Args&&... args)
+        : thread_(std::forward<F>(func), std::forward<Args>(args)...) {}
 
-    JoiningThread(JoiningThread&& other) noexcept  // 移动构造线程所有权
-        : thread_(std::move(other.thread_)) {}  // 接管底层线程
+    JoiningThread(JoiningThread&& other) noexcept : thread_(std::move(other.thread_)) {}
 
-    JoiningThread& operator=(JoiningThread&& other) noexcept {  // 移动赋值线程所有权
-        if (this != &other) {  // 避免自移动赋值
-            join_if_needed();  // 先回收当前线程
-            thread_ = std::move(other.thread_);  // 接管新线程
-        }  // 结束自赋值检查
-        return *this;  // 返回当前对象
-    }  // 结束移动赋值
+    JoiningThread& operator=(JoiningThread&& other) noexcept {
+        if (this != &other) {
+            // 覆盖前必须先 join 现有线程，否则丢弃一个可 join 的 thread 会 terminate。
+            join_if_needed();
+            thread_ = std::move(other.thread_);
+        }
+        return *this;
+    }
 
-    JoiningThread(const JoiningThread&) = delete;  // 禁止复制线程所有权
-    JoiningThread& operator=(const JoiningThread&) = delete;  // 禁止复制赋值线程所有权
+    JoiningThread(const JoiningThread&) = delete;
+    JoiningThread& operator=(const JoiningThread&) = delete;
 
-    ~JoiningThread() {  // 析构时回收线程
-        join_if_needed();  // 自动 join 可连接线程
-    }  // 结束析构
+    ~JoiningThread() { join_if_needed(); }
 
-    bool joinable() const noexcept {  // 查询底层线程是否可 join
-        return thread_.joinable();  // 返回可连接状态
-    }  // 结束 joinable
+    bool joinable() const noexcept { return thread_.joinable(); }
 
-    void join() {  // 主动等待线程结束
-        thread_.join();  // 调用底层 join
-    }  // 结束 join
+    void join() { thread_.join(); }
 
-    std::thread::id get_id() const noexcept {  // 获取线程标识
-        return thread_.get_id();  // 返回底层线程 id
-    }  // 结束 get_id
+    std::thread::id get_id() const noexcept { return thread_.get_id(); }
 
-private:  // 内部线程管理实现
-    void join_if_needed() noexcept {  // 在需要时回收线程
-        if (thread_.joinable()) {  // 仅 join 可连接线程
-            thread_.join();  // 等待线程结束
-        }  // 结束可连接检查
-    }  // 结束 join_if_needed
+ private:
+    void join_if_needed() noexcept {
+        if (thread_.joinable()) {
+            thread_.join();
+        }
+    }
 
-    std::thread thread_;  // 持有底层线程对象
-};  // 结束 JoiningThread 定义
+    std::thread thread_;
+};

@@ -6,10 +6,9 @@
 
 | 目录 | 定位 | 维护状态 |
 | --- | --- | --- |
-| [CPP-Learning-Plan](./CPP-Learning-Plan/README.md) | 12 个月 C++ 进阶路线、月度/周度计划和复盘 | 当前主线 |
+| [CPP-Learning-Plan](./CPP-Learning-Plan/README.md) | C++ 后端进阶路线图，按模块拆解与复盘 | 当前主线 |
 | [CPP-Practice](./CPP-Practice/README.md) | 和学习计划配套的可编译练习项目 | 当前主线 |
 | [Note](./Note/README.md) | 阅读笔记、主题总结和零散沉淀 | 持续补充 |
-| [scripts](./scripts/README.md) | 仓库维护脚本 | 按需维护 |
 | [TestProject](./TestProject/README.md) | 第三方源码阅读材料 | 保留原貌，少量索引 |
 | [Test](./Test/README.md) | 早期课程实验和零散测试代码 | 历史归档 |
 | [xuanyuan_webserver](./xuanyuan_webserver/README.md) | 早期网络编程项目与阶段代码 | 历史归档 |
@@ -24,15 +23,29 @@
 
 ## 当前主线
 
-### CPP-Learning-Plan — C++ 十二个月进阶计划
+### CPP-Learning-Plan — C++ 后端进阶路线图
 
-这是当前的主线学习计划，按 12 个月拆成 48 周推进，具体路线放在计划目录里。
+这是当前的主线学习路线，从语言内功到自研标准库、系统组件、网络异步再到分布式，按模块顺序推进。
+编号只表示学习顺序和依赖，不设 deadline；完成以「能脱稿重写」为准，具体路线放在计划目录里。
 
 入口： [详细计划](./CPP-Learning-Plan/README.md) | [学习进度](./CPP-Learning-Plan/Progress.md)
 
 ### CPP-Practice — 配套练习代码
 
-这里放每个月对应的小型可运行项目。每个子目录通常独立 CMake 构建，模块级 README 会说明覆盖内容和验证命令。
+这里放每个月对应的小型可运行项目。每个子目录既能独立 CMake 构建（只编译 demo），也能由根级
+聚合 CMake 统一构建并跑测试；模块级 README 会说明覆盖内容和验证命令。
+
+- **单元测试**：全部 18 个模块用 GoogleTest（CMake `FetchContent` 拉取）+ CTest。
+- **Sanitizer**：`-DS_DEMO_SANITIZER=address|thread` 一键开启 ASan/UBSan/TSan，主要给并发模块查竞态与 UB。
+- **CI**：`.github/workflows/ci.yml` 在 gcc/clang 矩阵下跑构建+测试，外加 ASan/UBSan、TSan、clang-format 检查。
+- **代码风格**：根级 `.clang-format`（Google / 4 空格 / 100 列）与 `.clang-tidy` 统一约束；注释约定见 [docs/comment-style.md](./docs/comment-style.md)。
+
+```bash
+# 根级聚合构建 + 全部测试
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+```
 
 入口： [练习代码索引](./CPP-Practice/README.md)
 
