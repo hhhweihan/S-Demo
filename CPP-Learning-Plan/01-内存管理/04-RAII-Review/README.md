@@ -18,8 +18,8 @@
 
 - RAII 练习：[CPP-Practice/raii](../../../CPP-Practice/raii)
 - 月度 benchmark：[CPP-Practice/month1_benchmark](../../../CPP-Practice/month1_benchmark)
-- 月度总结：[Note/C++-Note/Month01-内存管理实战总结.md](../../../Note/C++-Note/Month01-内存管理实战总结.md)
-- 周复盘：[Note/C++-Note/Week04-RAII工具-整月复盘总结.md](../../../Note/C++-Note/Week04-RAII工具-整月复盘总结.md)
+- 月度总结：[Note/C++-Note/内存管理实战总结.md](../../../Note/C++-Note/内存管理实战总结.md)
+- 周复盘：[Note/C++-Note/RAII工具-整月复盘总结.md](../../../Note/C++-Note/RAII工具-整月复盘总结.md)
 
 ## 阶段小结
 Week 04 的主线不是单独写几个 RAII 小工具，而是把 Month 1 的资源管理能力真正收口。前三周分别处理固定内存池、通用 allocator 和智能指针，本周则把“资源生命周期必须被对象托管”这条原则推广到作用域退出清理、文件句柄、sanitizer 验证和整月 benchmark。

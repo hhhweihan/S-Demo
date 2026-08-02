@@ -1,6 +1,6 @@
 # raft_kv
 
-Month 12（Week 45-49）对应的 Mini Raft KV 工程放在这个目录，分两条腿：
+Month 12（Week 45-50）对应的 Mini Raft KV 工程放在这个目录，分两条腿：
 
 - `raft_sim.h`：单进程、虚拟时钟驱动的**确定性仿真** Raft（种子化 RNG、每步安全不变量校验），
   是 chaos/生产化测试的核心，`raft_kv_tests` 默认跑的 12 个用例都在这条腿上。
@@ -9,6 +9,10 @@ Month 12（Week 45-49）对应的 Mini Raft KV 工程放在这个目录，分两
 
 两条腿**互不改动对方**：仿真版继续给可复现的 chaos 覆盖，真实网络版给一次"节点之间真的隔着网络"
 的第一手经验（超时重传、粘包、真崩溃恢复）。
+
+## 项目定位
+
+这是当前仓库最适合作为分布式方向代表作的项目。它的目标不是复刻 etcd/raft，而是把 Raft 的核心安全性、崩溃恢复边界和真实网络语义拆开验证：仿真版负责可复现的协议正确性，真实网络版负责 TCP/epoll/进程崩溃这些操作系统层面的经验。
 
 ## 覆盖内容
 
@@ -29,6 +33,12 @@ Month 12（Week 45-49）对应的 Mini Raft KV 工程放在这个目录，分两
 - failover election wall-clock proxy < 500ms
 - RaftKV Put/Get average latency proxy < 20ms
 - 崩溃持久化：`crash()` 丢全部易失态，`restart()` 从 `Storage::load()` 真磁盘重载
+
+## 边界与非目标
+
+- 真实网络版已经使用真 TCP、真 epoll/timerfd 和独立 OS 进程，但目前仍是学习版单机 3 节点集群。
+- 默认 CI 路径不跑真实进程 kill-9 集成测试；该测试使用 `integration` label 单独执行。
+- 尚未实现 joint consensus 成员变更、完整生产级 snapshot 文件管理、跨机器部署和真实大规模压测。
 
 ## 真实网络版（`net/`）
 

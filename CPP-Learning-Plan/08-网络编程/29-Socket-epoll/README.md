@@ -17,7 +17,7 @@
 ## 本周产出
 
 - `Buffer`：长度字段拆包，覆盖 TCP 粘包/半包核心问题
-- 周复盘：`Note/C++-Note/Week29-SocketEpoll-复盘总结.md`
+- 周复盘：`Note/C++-Note/SocketEpoll-复盘总结.md`
 
 ## 阶段小结
 Week29 的重点是理解网络 IO 的基本问题。TCP 是字节流，没有消息边界，因此需要应用层协议解决粘包/半包；非阻塞 IO 需要正确处理 EAGAIN；epoll 的 LT/ET 差异决定读取循环是否必须一次读到 EAGAIN。当前 Windows 环境无法直接运行 epoll，因此工程先验证跨平台 Buffer 协议层。

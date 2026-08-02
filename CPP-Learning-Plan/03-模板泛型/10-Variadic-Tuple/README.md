@@ -19,7 +19,7 @@
 - 练习工程：`CPP-Practice/variadic_tuple/`
 - 核心头文件：`CPP-Practice/variadic_tuple/templates/my_tuple.h`
 - 运行入口：`CPP-Practice/variadic_tuple/main.cpp`
-- 知识总结：`Note/C++-Note/Week10-变参模板与Tuple-复盘总结.md`
+- 知识总结：`Note/C++-Note/变参模板与Tuple-复盘总结.md`
 
 ## 阶段小结
 Week 10 的主线是把“参数包”从语法概念变成可用的类型和对象展开工具。前两天通过 `sum`、`print_all`、`count`、`all_integral`、`max_of` 和 `index_sequence` 熟悉变参模板与折叠表达式；后四天把这些能力落到手写 `Tuple` 上，完成了存储、索引访问、展开调用、比较和打印。

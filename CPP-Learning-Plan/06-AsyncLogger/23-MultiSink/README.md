@@ -19,7 +19,7 @@
 
 - `Sink` / `MemorySink` / `ConsoleSink` / `FileSink`
 - FileSink 按日期命名文件，为按天滚动打基础
-- 周复盘：`Note/C++-Note/Week23-多Sink日志-复盘总结.md`
+- 周复盘：`Note/C++-Note/多Sink日志-复盘总结.md`
 
 ## 阶段小结
 Week23 的重点是把“日志生产”和“日志去哪里”解耦。Logger 只面对 `Sink` 抽象，具体输出到内存、控制台还是文件都由 sink 决定。当前 `FileSink` 已完成按日期命名日志文件；历史压缩和自动清理属于后续运维策略，未在本周 demo 中实现。

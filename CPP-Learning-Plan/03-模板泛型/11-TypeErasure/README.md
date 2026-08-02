@@ -19,7 +19,7 @@
 - 练习工程：`CPP-Practice/type_erasure/`
 - 核心头文件：`my_optional.h`、`my_variant.h`、`my_function.h`
 - 整合入口：`CPP-Practice/type_erasure/main.cpp`
-- 知识总结：`Note/C++-Note/Week11-类型擦除-复盘总结.md`
+- 知识总结：`Note/C++-Note/类型擦除-复盘总结.md`
 
 ## 阶段小结
 Week 11 的重点是理解“类型擦除”不是一种固定写法，而是一组在开放性、性能、类型安全之间做取舍的设计。`Optional<T>` 解决“可能没有值”的延迟构造问题；`Variant<Ts...>` 解决“固定候选类型集合里当前是哪一个”的运行时分发问题；`Function<Ret(Args...)>` 解决“可调用对象具体类型未知，但调用签名统一”的问题；`any` 则代表更开放的运行时类型容器。

@@ -17,7 +17,7 @@
 ## 本周产出
 
 - `Channel` / `FakePoller` / `EventLoop`
-- 周复盘：`Note/C++-Note/Week30-单线程Reactor-复盘总结.md`
+- 周复盘：`Note/C++-Note/单线程Reactor-复盘总结.md`
 
 ## 阶段小结
 Week30 完成单线程 Reactor 的核心抽象。Reactor 的职责不是处理业务，而是等待事件、分发事件、调用注册回调。`Channel` 代表一个 fd 上关心的事件，`Poller` 负责返回活跃 Channel，`EventLoop` 负责调度。FakePoller 让这套结构能在 Windows 下被单元测试验证。

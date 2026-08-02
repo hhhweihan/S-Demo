@@ -54,7 +54,7 @@ Get(key)
 
 本模块已完成 LevelDB/LSM Tree 的主路径理解和教学实现，并进一步做了崩溃安全化旗舰改造。写入路径从 WAL 顺序追加（CRC 记录帧 + fsync 落盘才应答）开始，进入 MemTable 跳表（二进制 internal key + tombstone），随后 flush 到块式 SSTable；读取路径先查 MemTable，再通过 BloomFilter/SSTable 从新到旧查磁盘有序文件，遇 tombstone 即止。崩溃恢复扫描目录按文件名重建分层文件集，回放 WAL 补齐未落盘的已确认写，崩溃瞬间没写完的尾部被干净丢弃。当前工程突出机制理解与崩溃安全，未复刻 LevelDB 的 TableCache、VersionSet/MANIFEST 与多层 leveled compaction 的完整策略。
 
-详细总结见 `Note/C++-Note/Month07-LevelDB源码精读总结.md`。
+详细总结见 `Note/C++-Note/LevelDB源码精读总结.md`。
 
 ## 验证命令
 

@@ -70,7 +70,7 @@
 
 本模块已完成网络编程的跨平台核心练习：协议层拆包、Reactor 事件分发、HTTP GET 响应和 RPC 请求-响应。由于当前环境是 Windows，epoll、wrk、ASan/TSan 属于 Linux/WSL2 专项验证，文档中保留为未完成项。
 
-详细总结见 `Note/C++-Note/Month08-网络编程Reactor实战总结.md`。
+详细总结见 `Note/C++-Note/网络编程Reactor实战总结.md`。
 
 ## 验证命令
 

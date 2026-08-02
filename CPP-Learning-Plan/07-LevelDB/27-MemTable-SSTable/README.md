@@ -17,7 +17,7 @@
 ## 本周产出
 
 - `MemTable` / `BloomFilter` / `SSTable`
-- 周复盘：`Note/C++-Note/Week27-MemTable-SSTable-复盘总结.md`
+- 周复盘：`Note/C++-Note/MemTable-SSTable-复盘总结.md`
 
 ## 阶段小结
 Week27 串起 LSM 的内存表和磁盘表。MemTable 负责接收最新写入，InternalKey 用 sequence 表达版本顺序；SSTable 把有序数据落盘，并用 BloomFilter 在查找不存在 key 时快速跳过文件。早期教学版 SSTable 使用文本文件和内存索引以突出数据流；阶段 29 已升级为块式二进制格式（data block 前缀压缩 + restart 点二分、持久 bloom block、index block、48B footer magic），完整覆盖 Block/TableBuilder 的工程细节。

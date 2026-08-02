@@ -17,7 +17,7 @@
 ## 本周产出
 
 - `SkipList<Key, Value>`：随机高度、插入、查找、有序迭代
-- 周复盘：`Note/C++-Note/Week26-SkipList-复盘总结.md`
+- 周复盘：`Note/C++-Note/SkipList-复盘总结.md`
 
 ## 阶段小结
 Week26 完成教学版 SkipList。跳表通过随机层高把有序链表扩展为多层索引，查询期望复杂度接近 $O(\log n)$。LevelDB 原版 SkipList 的亮点在于单写多读场景下用 acquire/release 语义发布节点；本工程先实现单线程教学版，重点验证随机高度、插入、查找和有序迭代。

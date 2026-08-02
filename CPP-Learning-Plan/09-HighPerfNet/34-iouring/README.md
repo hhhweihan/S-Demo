@@ -18,7 +18,7 @@
 ## 本周产出
 
 - `IoUringSimulator`：SQ/CQ 概念模拟
-- 周复盘：`Note/C++-Note/Week34-io_uring-复盘总结.md`
+- 周复盘：`Note/C++-Note/io_uring-复盘总结.md`
 
 ## 阶段小结
 Week34 先完成 io_uring 的核心模型理解：提交队列（SQ）描述待执行 IO，完成队列（CQ）返回执行结果。当前 Windows 环境不支持原生 io_uring，因此代码采用模拟器验证队列语义；吞吐对比和固定缓冲区 benchmark 需要在 Linux 上补测。

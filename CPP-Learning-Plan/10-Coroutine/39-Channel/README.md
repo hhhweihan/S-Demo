@@ -19,7 +19,7 @@
 
 - `Channel<T>`
 - `select_recv`
-- 周复盘：`Note/C++-Note/Week39-Channel通信-复盘总结.md`
+- 周复盘：`Note/C++-Note/Channel通信-复盘总结.md`
 
 ## 阶段小结
 Week39 完成缓冲 Channel 和 select 风格接收。Channel 是协程之间传递数据和同步的核心抽象；当前版本实现了非阻塞 send/recv 和多个 channel 的轮询接收。真正 Go 风格的无缓冲阻塞握手需要与 Scheduler 深度集成，后续可继续扩展。

@@ -62,7 +62,7 @@ RPC 框架
 
 本模块已完成类 gRPC 框架的教学闭环：消息编码、帧协议、客户端/服务端调用、服务发现和中间件机制。作为学习 demo，本机模拟验收已经替代真实 protobuf/etcd/gRPC benchmark，用 proxy 指标覆盖延迟、吞吐、服务发现和 mock framed baseline 对比。
 
-详细总结见 `Note/C++-Note/Month11-RPC框架实战总结.md`。
+详细总结见 `Note/C++-Note/RPC框架实战总结.md`。
 
 ## 验证命令
 

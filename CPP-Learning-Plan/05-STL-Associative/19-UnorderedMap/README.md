@@ -18,7 +18,7 @@
 ## 本周产出
 
 - `MyUnorderedMap<K, V>`：开链哈希表、自动 rehash、erase
-- 周复盘：`Note/C++-Note/Week19-UnorderedMap-复盘总结.md`
+- 周复盘：`Note/C++-Note/UnorderedMap-复盘总结.md`
 
 ## 阶段小结
 Week19 从有序树切换到哈希表。哈希表的平均 $O(1)$ 来自桶定位和较低负载因子；当元素数量超过 `bucket_count * max_load_factor` 时，需要扩容并把所有元素重新分布到新桶。开链法让冲突元素挂在同一个 bucket 链表中，删除时只需要从链表摘除对应节点。

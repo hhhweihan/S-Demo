@@ -19,8 +19,8 @@ CRTP 静态多态、policy-based design、C++20 concepts 入门，跑整月综�
 - 练习工程：`CPP-Practice/advanced_templates/`
 - 线程池约束改动：`CPP-Practice/thread_pool/concurrent/thread_pool.h`
 - LevelDB 预研目录：`TestProject/leveldb/`
-- 周复盘：`Note/C++-Note/Week12-高级模板与整月复盘总结.md`
-- 月总结：`Note/C++-Note/Month03-模板泛型实战总结.md`
+- 周复盘：`Note/C++-Note/高级模板与整月复盘总结.md`
+- 月总结：`Note/C++-Note/模板泛型实战总结.md`
 
 ## 阶段小结
 Week 12 是 Month 3 的高级技巧和整月收束周。CRTP 和虚函数对比解决“静态多态还是动态多态”的选择问题；Policy-Based Design 把策略变化从运行时分支提升为模板参数；concepts 把 SFINAE 的隐式失败变成更清晰的接口约束；constexpr 把一部分计算提前到编译期；综合项目则把 Week09-11 的 `type_traits`、`Tuple`、`Optional`、`Variant`、`Function` 放进同一工程验证。

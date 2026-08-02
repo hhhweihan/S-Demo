@@ -19,7 +19,7 @@
 
 - `ConnectionPool`
 - `RoundRobinBalancer` / `LeastConnBalancer`
-- 周复盘：`Note/C++-Note/Week35-连接池负载均衡-复盘总结.md`
+- 周复盘：`Note/C++-Note/连接池负载均衡-复盘总结.md`
 
 ## 阶段小结
 Week35 的重点是客户端侧复用和后端选择。连接池减少频繁建连成本，RoundRobin 保证简单均匀分配，LeastConn 更适合请求耗时差异较大的场景，健康检查避免把请求发到不可用后端。当前 demo 验证了分配、释放和跳过 unhealthy backend。

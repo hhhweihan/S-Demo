@@ -19,7 +19,7 @@
 
 - `Scheduler`
 - `YieldAwaiter`
-- 周复盘：`Note/C++-Note/Week38-协程调度器-复盘总结.md`
+- 周复盘：`Note/C++-Note/协程调度器-复盘总结.md`
 
 ## 阶段小结
 Week38 完成最小调度器。ready queue 保存可运行 coroutine handle，`yield` 挂起当前协程并把它重新排队，`run` 循环恢复任务直到队列为空。这个模型虽然简单，但已经覆盖协作式调度的关键语义。

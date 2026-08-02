@@ -19,7 +19,7 @@
 
 - `TimerWheel`
 - `PrecisionTimerHeap`
-- 周复盘：`Note/C++-Note/Week33-TimerWheel-复盘总结.md`
+- 周复盘：`Note/C++-Note/TimerWheel-复盘总结.md`
 
 ## 阶段小结
 Week33 完成定时器轮和精确定时器。时间轮适合大量连接的粗粒度超时管理，刷新连接只需更新过期 tick；最小堆适合数量较少但要求更精确的定时任务。当前 demo 验证了刷新、过期回调和按 deadline 弹出。

@@ -18,7 +18,7 @@
 
 - 练习工程：`CPP-Practice/stl_associative/`
 - 核心文件：`CPP-Practice/stl_associative/mini_associative.h`
-- 周复盘：`Note/C++-Note/Week17-红黑树-复盘总结.md`
+- 周复盘：`Note/C++-Note/红黑树-复盘总结.md`
 
 ## 阶段小结
 Week17 的核心是把二叉搜索树的有序性和红黑树的平衡约束结合起来。插入时先按 BST 规则落点，再通过父叔祖关系做变色和旋转；最终根节点强制为黑色。验证不是只看遍历有序，还要检查根黑、红节点无红子、所有路径黑高一致，以及高度不超过约 $2\log_2(n)$。

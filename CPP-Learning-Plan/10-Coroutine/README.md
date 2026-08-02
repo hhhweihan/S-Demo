@@ -70,7 +70,7 @@ ucontext 协程库
 
 本模块已完成标准 C++20 coroutine 的核心闭环。虽然没有在 Windows 下实现 POSIX ucontext 有栈协程，但已经把协程对象、调度器、Channel 通信和异步接口风格跑通。后续切 Linux/POSIX 后，可以用同一套调度/Channel 思路替换底层 fiber 或 epoll hook。
 
-详细总结见 `Note/C++-Note/Month10-协程库实战总结.md`。
+详细总结见 `Note/C++-Note/协程库实战总结.md`。
 
 ## 验证命令
 

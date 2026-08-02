@@ -17,7 +17,7 @@
 
 ## 本周产出
 
-- 周复盘：[Note/C++-Note/Week05-阻塞队列-复盘总结.md](../../../Note/C++-Note/Week05-阻塞队列-复盘总结.md)
+- 周复盘：[Note/C++-Note/阻塞队列-复盘总结.md](../../../Note/C++-Note/阻塞队列-复盘总结.md)
 - 后续代码承接：[CPP-Practice/thread_pool](../../../CPP-Practice/thread_pool)
 
 ## 阶段小结

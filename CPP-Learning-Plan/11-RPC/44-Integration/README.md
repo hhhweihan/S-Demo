@@ -18,8 +18,8 @@
 ## 本周产出
 
 - Interceptor 机制
-- 周复盘：`Note/C++-Note/Week44-RPC整合复盘总结.md`
-- 月总结：`Note/C++-Note/Month11-RPC框架实战总结.md`
+- 周复盘：`Note/C++-Note/RPC整合复盘总结.md`
+- 月总结：`Note/C++-Note/RPC框架实战总结.md`
 
 ## 阶段小结
 Week44 完成 RPC 框架端到端验证：编解码、帧协议、同步调用、异步 Future、服务发现、拦截器都已跑通。作为学习 demo，真实网络、etcd 和 gRPC 对比改用本机 proxy benchmark 验收。

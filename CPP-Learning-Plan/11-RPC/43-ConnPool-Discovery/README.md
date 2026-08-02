@@ -18,7 +18,7 @@
 ## 本周产出
 
 - `Registry`：内存版服务注册与发现
-- 周复盘：`Note/C++-Note/Week43-RPC服务发现-复盘总结.md`
+- 周复盘：`Note/C++-Note/RPC服务发现-复盘总结.md`
 
 ## 阶段小结
 Week43 完成服务发现教学版本。真实 etcd 需要网络依赖、租约和 watch 流；当前 Registry 用内存结构模拟服务名到 endpoint 列表的映射，并用 round-robin 返回 endpoint。这样先把 RPC client 如何依赖发现结果讲清楚。

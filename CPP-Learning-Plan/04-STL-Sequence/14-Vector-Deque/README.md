@@ -18,7 +18,7 @@
 
 - `MyVector<T>`：动态数组、倍增扩容、随机访问迭代器
 - `MyDeque<T>`：环形缓冲双端队列，支持头尾操作和下标访问
-- 周复盘：`Note/C++-Note/Week14-VectorDeque-复盘总结.md`
+- 周复盘：`Note/C++-Note/VectorDeque-复盘总结.md`
 
 ## 阶段小结
 Week 14 把 Week13 的迭代器协议落到序列容器上。`MyVector` 的关键是容量和大小分离：`size` 表示已构造元素数量，`capacity` 表示已申请空间；随机访问迭代器可以直接复用裸指针，因此能被 `std::sort` 使用。`MyDeque` 采用环形缓冲实现，重点是把逻辑下标映射为物理下标，让 `push_front` 和 `push_back` 都能保持稳定的头尾操作语义。

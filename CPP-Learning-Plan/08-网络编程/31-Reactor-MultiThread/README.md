@@ -18,7 +18,7 @@
 
 - `EventLoopThreadPool`
 - `HttpParser` / `HttpServerCore`
-- 周复盘：`Note/C++-Note/Week31-多线程ReactorHTTP-复盘总结.md`
+- 周复盘：`Note/C++-Note/多线程ReactorHTTP-复盘总结.md`
 
 ## 阶段小结
 Week31 的重点是把单线程 Reactor 扩展成 one-loop-per-thread 模型，并接入 HTTP 协议层。当前实现验证了 loop 轮转分配和 HTTP GET core 逻辑；wrk 5000 QPS 需要真实 Linux socket server 和压测环境，未在 Windows 下执行。

@@ -18,7 +18,7 @@
 
 - 练习工程：`CPP-Practice/async_logger/`
 - 核心文件：`CPP-Practice/async_logger/mini_logger.h`
-- 周复盘：`Note/C++-Note/Week21-同步日志基础-复盘总结.md`
+- 周复盘：`Note/C++-Note/同步日志基础-复盘总结.md`
 
 ## 阶段小结
 Week21 完成同步日志骨架。同步 logger 的优点是语义简单：调用线程完成格式化并直接写入 sink；缺点是锁竞争和 IO 会进入业务路径。本周重点是把日志级别、时间戳、线程 ID、文件行号和流式接口先做成稳定抽象，为后续异步化提供一致前端。

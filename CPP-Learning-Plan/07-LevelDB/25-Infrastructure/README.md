@@ -17,7 +17,7 @@
 ## 本周产出
 
 - 练习工程：`CPP-Practice/leveldb_mini/`
-- 周复盘：`Note/C++-Note/Week25-LevelDB基础设施-复盘总结.md`
+- 周复盘：`Note/C++-Note/LevelDB基础设施-复盘总结.md`
 
 ## 阶段小结
 Week25 的重点是 LevelDB 的基础设计哲学：小对象、清晰边界、显式状态和可控内存。`Slice` 避免不必要拷贝，`Status` 避免异常路径扩散，`Arena` 通过批量释放降低单对象分配成本。这些基础设施本身不复杂，但决定了后续 SkipList、MemTable 和 SSTable 的接口风格。

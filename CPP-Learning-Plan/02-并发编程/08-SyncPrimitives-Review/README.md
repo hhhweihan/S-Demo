@@ -8,7 +8,7 @@
 
 - 代码实现落在 [CPP-Practice/thread_pool/concurrent/rw_mutex.h](../../../CPP-Practice/thread_pool/concurrent/rw_mutex.h)、[CPP-Practice/thread_pool/concurrent/countdown_latch.h](../../../CPP-Practice/thread_pool/concurrent/countdown_latch.h)、[CPP-Practice/thread_pool/concurrent/thread_pool.h](../../../CPP-Practice/thread_pool/concurrent/thread_pool.h)
 - Week 08 相关测试与 benchmark 入口统一放在 [CPP-Practice/thread_pool/main.cpp](../../../CPP-Practice/thread_pool/main.cpp)
-- 并发整月总结文章见 [Note/C++-Note/Month02-并发编程实战总结.md](../../../Note/C++-Note/Month02-并发编程实战总结.md)
+- 并发整月总结文章见 [Note/C++-Note/并发编程实战总结.md](../../../Note/C++-Note/并发编程实战总结.md)
 
 ## 验证结论
 

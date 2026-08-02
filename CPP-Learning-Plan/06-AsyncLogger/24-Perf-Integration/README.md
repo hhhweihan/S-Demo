@@ -17,8 +17,8 @@
 ## 本周产出
 
 - 练习工程：`CPP-Practice/async_logger/`
-- 周复盘：`Note/C++-Note/Week24-异步日志性能整合复盘总结.md`
-- 月总结：`Note/C++-Note/Month06-异步日志系统实战总结.md`
+- 周复盘：`Note/C++-Note/异步日志性能整合复盘总结.md`
+- 月总结：`Note/C++-Note/异步日志系统实战总结.md`
 
 ## 阶段小结
 Week24 完成日志库整合与本地验证：同步写入、异步后台 flush、多线程无丢失、多 sink 输出和 enqueue latency smoke test 都已跑通。本周没有引入 spdlog/glog，也没有跑百万级基准，因此相关指标保留为后续专项压测，而不是在文档里勾成完成。

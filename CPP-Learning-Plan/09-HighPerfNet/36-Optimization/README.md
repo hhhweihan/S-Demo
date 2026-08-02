@@ -17,8 +17,8 @@
 ## 本周产出
 
 - `OptimizationReport`
-- 周复盘：`Note/C++-Note/Week36-高性能网络优化复盘总结.md`
-- 月总结：`Note/C++-Note/Month09-高性能网络库实战总结.md`
+- 周复盘：`Note/C++-Note/高性能网络优化复盘总结.md`
+- 月总结：`Note/C++-Note/高性能网络库实战总结.md`
 
 ## 阶段小结
 Week36 完成整合和优化边界梳理。zero-copy、SO_REUSEPORT、io_uring 性能对比和 10 万连接稳定性都强依赖 Linux 内核和系统参数；当前 Windows 工程验证的是组件模型和接口行为，并在文档中保留真实压测项。

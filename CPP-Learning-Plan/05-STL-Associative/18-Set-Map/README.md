@@ -19,7 +19,7 @@
 
 - `MySet<T>` / `MyMap<K, V>`：基于 RBTree 的唯一 key 容器
 - `MyMultiSet<T>` / `MyMultiMap<K, V>`：重复 key 语义示例
-- 周复盘：`Note/C++-Note/Week18-SetMap-复盘总结.md`
+- 周复盘：`Note/C++-Note/SetMap-复盘总结.md`
 
 ## 阶段小结
 Week18 体现了“底层树结构”和“上层容器语义”的分离。`set` 的 key 也是 value，`map` 的 key 用于排序，value 用于承载业务数据；`multiset/multimap` 的核心差异是 insert 不再去重，`count` 和范围查询要能表达重复 key。

@@ -19,8 +19,8 @@
 
 - `SleepAwaiter`
 - `AsyncHttpClientCore`
-- 周复盘：`Note/C++-Note/Week40-协程异步IO复盘总结.md`
-- 月总结：`Note/C++-Note/Month10-协程库实战总结.md`
+- 周复盘：`Note/C++-Note/协程异步IO复盘总结.md`
+- 月总结：`Note/C++-Note/协程库实战总结.md`
 
 ## 阶段小结
 Week40 完成协程式异步编程模型的教学闭环：协程可以挂起、调度器可以恢复、Channel 可以传递结果、HTTP client core 可以用同步风格表达异步流程。真实 epoll hook 和系统调用替换需要 Linux/POSIX 环境，当前工程不伪造该部分结果。

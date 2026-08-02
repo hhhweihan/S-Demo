@@ -19,8 +19,8 @@
 - `MyStack<T>`：LIFO 容器适配器
 - `MyQueue<T>`：FIFO 容器适配器
 - `MyPriorityQueue<T, Compare>`：支持自定义比较器的堆适配器
-- 周复盘：`Note/C++-Note/Week16-容器适配器与整月复盘总结.md`
-- 月总结：`Note/C++-Note/Month04-STL序列容器实战总结.md`
+- 周复盘：`Note/C++-Note/容器适配器与整月复盘总结.md`
+- 月总结：`Note/C++-Note/STL序列容器实战总结.md`
 
 ## 阶段小结
 Week 16 体现了“适配器不是新容器，而是受限接口视图”。`stack` 限制为后进先出，`queue` 限制为先进先出，`priority_queue` 则把底层序列容器和堆算法组合起来，对外只暴露 `top/push/pop`。这种设计减少了用户误用空间，也让底层容器可以替换。

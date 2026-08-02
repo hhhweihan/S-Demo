@@ -82,7 +82,7 @@ Leader 职责：
 
 本模块已完成 Mini Raft KV 的教学闭环：选举、日志复制、状态机应用、故障后重选、WAL-like 恢复和 snapshot。阶段 49 做了生产化改造：以 `raft_sim.h`（真 per-node RPC handler + 虚拟时间网络 + 每步安全不变量校验）为核心，补齐真持久化、日志压缩/InstallSnapshot、ReadIndex 线性一致读和 Pre-Vote，全部在确定性多 seed 仿真验证。阶段 50 进一步补上仿真版验证不了的一课：真实网络化——每个节点独立 OS 进程，真 TCP + 真 epoll(LT)+timerfd 驱动，可以真的 `kill -9` 一个节点观察多数派重选、重启后从 `FileStorage` 磁盘真恢复；这份实现是针对"单节点+真实异步+真实时钟"独立重写的，不改动 `raft_sim.h::Cluster` 及其 12 个既有确定性测试。成员变更（joint consensus）推迟到后续。原 `mini_raft_kv.h` 降级为文档标注的上帝视角教学基线，仅供对照阅读，测试 target 只依赖 `raft_sim.h`。
 
-详细总结见 `Note/C++-Note/Month12-RaftKV实战总结.md`。
+详细总结见 `Note/C++-Note/RaftKV实战总结.md`。
 
 ## 验证命令
 

@@ -17,8 +17,8 @@
 ## 本周产出
 
 - `RpcServerCore` / `RpcClientCore`
-- 周复盘：`Note/C++-Note/Week32-HTTP与网络复盘总结.md`
-- 月总结：`Note/C++-Note/Month08-网络编程Reactor实战总结.md`
+- 周复盘：`Note/C++-Note/HTTP与网络复盘总结.md`
+- 月总结：`Note/C++-Note/网络编程Reactor实战总结.md`
 
 ## 阶段小结
 Week32 完成 HTTP/RPC 和整月复盘。当前工程不是完整网络服务器，而是可在 Windows 下验证的协议与 Reactor 核心：拆包、事件分发、HTTP GET、RPC frame 往返。真实 epoll ET、wrk QPS、ASan/TSan 需要切换到 Linux/WSL2 后补测。

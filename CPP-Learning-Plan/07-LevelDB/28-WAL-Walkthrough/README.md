@@ -17,8 +17,8 @@
 ## 本周产出
 
 - `WAL` / `MiniDB`：追加、恢复、Put/Get/Flush
-- 周复盘：`Note/C++-Note/Week28-WAL与LevelDB整合复盘总结.md`
-- 月总结：`Note/C++-Note/Month07-LevelDB源码精读总结.md`
+- 周复盘：`Note/C++-Note/WAL与LevelDB整合复盘总结.md`
+- 月总结：`Note/C++-Note/LevelDB源码精读总结.md`
 
 ## 阶段小结
 Week28 把 LSM 写入路径串起来：`Put` 先追加 WAL，再写 MemTable；flush 时将有序用户 key 写入 SSTable；重启时通过 WAL replay 恢复未落盘数据。这个流程解释了 LevelDB 为什么写入快：写入主要是顺序追加和内存结构更新，随机 IO 被推迟到后台 compaction。

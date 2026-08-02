@@ -19,7 +19,7 @@
 - 练习工程：[CPP-Practice/template_traits](../../../CPP-Practice/template_traits)
 - 核心实现：[templates/my_type_traits.h](../../../CPP-Practice/template_traits/templates/my_type_traits.h)
 - 运行入口：[main.cpp](../../../CPP-Practice/template_traits/main.cpp)
-- 知识总结：[Note/C++-Note/Week09-SFINAE-TypeTraits-知识梳理总结.md](../../../Note/C++-Note/Week09-SFINAE-TypeTraits-知识梳理总结.md)
+- 知识总结：[Note/C++-Note/SFINAE-TypeTraits-知识梳理总结.md](../../../Note/C++-Note/SFINAE-TypeTraits-知识梳理总结.md)
 
 ## 七天路线
 

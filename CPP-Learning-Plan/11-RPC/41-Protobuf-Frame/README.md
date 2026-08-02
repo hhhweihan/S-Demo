@@ -18,7 +18,7 @@
 
 - `RpcRequest` / `RpcResponse`
 - `FrameCodec`
-- 周复盘：`Note/C++-Note/Week41-RPC帧协议-复盘总结.md`
+- 周复盘：`Note/C++-Note/RPC帧协议-复盘总结.md`
 
 ## 阶段小结
 Week41 完成 RPC 编解码层。真实 protobuf 依赖外部代码生成器，本工程采用简化 key-value 编码来突出 RPC 消息结构和帧协议。长度前缀帧解决半包问题，请求/响应结构提供调用链元数据。

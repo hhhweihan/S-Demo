@@ -19,7 +19,7 @@
 
 - `RpcServer`
 - `RpcClient`
-- 周复盘：`Note/C++-Note/Week42-RPC调用-复盘总结.md`
+- 周复盘：`Note/C++-Note/RPC调用-复盘总结.md`
 
 ## 阶段小结
 Week42 完成 RPC 调用核心：服务端按 service.method 分派，客户端提供同步调用和 Future 异步调用。当前 demo 是同进程调用链，用于验证框架结构；超时、取消和多路复用可以基于 request id 和 pending map 继续扩展。

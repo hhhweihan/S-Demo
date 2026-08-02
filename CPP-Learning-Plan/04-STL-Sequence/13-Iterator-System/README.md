@@ -19,7 +19,7 @@
 - 练习工程：`CPP-Practice/stl_sequence/`
 - 核心文件：`CPP-Practice/stl_sequence/mini_stl.h`
 - 验证入口：`CPP-Practice/stl_sequence/main.cpp`
-- 周复盘：`Note/C++-Note/Week13-迭代器体系-复盘总结.md`
+- 周复盘：`Note/C++-Note/迭代器体系-复盘总结.md`
 
 ## 阶段小结
 Week 13 的核心不是“写几个空 tag”，而是建立 STL 算法识别容器能力的协议。`iterator_traits` 让算法不用关心迭代器是类还是裸指针；迭代器类别则决定算法能否随机跳转、双向移动或只能单向扫描。这个协议后续直接影响 `MyVector` 能否进入 `std::sort`，以及 `MyList` 能否进入 `std::reverse`。

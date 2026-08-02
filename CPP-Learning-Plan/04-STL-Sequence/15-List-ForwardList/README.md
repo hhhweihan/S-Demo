@@ -18,7 +18,7 @@
 
 - `MyList<T>`：哨兵节点、双向链表、双向迭代器
 - `MyForwardList<T>`：单向链表、前向迭代器
-- 周复盘：`Note/C++-Note/Week15-ListForwardList-复盘总结.md`
+- 周复盘：`Note/C++-Note/ListForwardList-复盘总结.md`
 
 ## 阶段小结
 Week 15 的重点是节点式容器。相比 `vector`，链表不追求连续内存和随机访问，而是追求局部插入删除时少移动元素。`MyList` 使用哨兵节点统一空表、头尾插入和删除逻辑，让 `begin()` 指向首节点、`end()` 指向哨兵；双向迭代器满足 `std::reverse` 的最低要求。`MyForwardList` 则只保留单向链接，接口更轻，但无法支持反向移动。
