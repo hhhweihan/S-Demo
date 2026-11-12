@@ -6,10 +6,10 @@
 # built standalone into its own build*/ dir. One generic rule covers both instead of
 # enumerating every module by hand (which silently missed new modules before).
 /build*/
-CPP-Practice/**/build*/
+Learning/**/build*/
 
 # Stray local artifacts
-CPP-Practice/raii/*.txt
+Learning/01-内存管理/practice/raii/*.txt
 
 # Compiler/OS junk that historically leaked into Test/ and xuanyuan_webserver/ (archived,
 # not maintained) — keep it out for good instead of re-committing it on every checkout.

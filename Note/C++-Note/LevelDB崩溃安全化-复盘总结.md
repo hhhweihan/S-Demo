@@ -2,9 +2,9 @@
 
 ## 核心目标
 
-Week29（LevelDB 线）把 `CPP-Practice/leveldb_mini/` 从教学版 LSM 升级为崩溃安全存储引擎：已确认写入必须在进程猝死后幸存，崩溃瞬间没写完的尾部要被干净丢弃。
+Week29（LevelDB 线）把 [leveldb_mini](../../Learning/07-LevelDB/practice/leveldb_mini) 从教学版 LSM 升级为崩溃安全存储引擎：已确认写入必须在进程猝死后幸存，崩溃瞬间没写完的尾部要被干净丢弃。
 
-> 当前 `CPP-Learning-Plan` 里 Week29 同时存在于 LevelDB 的 `29-CrashSafety` 和网络编程的 `29-Socket-epoll`，所以 Note 目录保留两个 Week29 复盘文件分别对应两条线。
+> 当前 `Learning` 里 Week29 同时存在于 LevelDB 的 `29-CrashSafety` 和网络编程的 `29-Socket-epoll`，所以 Note 目录保留两个 Week29 复盘文件分别对应两条线。
 
 ## WAL：从 append/replay 到 CRC 记录帧
 

@@ -2,7 +2,7 @@
 
 ## 月度目标回顾
 
-Month04 的目标是自编 STL 序列容器，完成从迭代器协议到容器适配器的闭环。代码集中在 `CPP-Practice/stl_sequence/`。
+Month04 的目标是自编 STL 序列容器，完成从迭代器协议到容器适配器的闭环。代码集中在 [stl_sequence](../../Learning/04-STL-Sequence/practice/stl_sequence)。
 
 ## 已完成组件
 
@@ -36,9 +36,9 @@ Month04 的目标是自编 STL 序列容器，完成从迭代器协议到容器�
 ## 构建验证
 
 ```powershell
-cmake -S CPP-Practice/stl_sequence -B CPP-Practice/stl_sequence/build
-cmake --build CPP-Practice/stl_sequence/build --config Release
-.\CPP-Practice\stl_sequence\build\Release\stl_sequence_demo.exe
+cmake -S Learning/04-STL-Sequence/practice/stl_sequence -B Learning/04-STL-Sequence/practice/stl_sequence/build
+cmake --build Learning/04-STL-Sequence/practice/stl_sequence/build --config Release
+.\Learning\04-STL-Sequence\practice\stl_sequence\build\Release\stl_sequence_demo.exe
 ```
 
 验证结果：全部 `[PASS]`。

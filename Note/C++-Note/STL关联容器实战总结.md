@@ -2,7 +2,7 @@
 
 ## 月度目标回顾
 
-Month05 完成自编 STL 关联容器、哈希表、算法和 allocator 接入。代码位于 `CPP-Practice/stl_associative/`。
+Month05 完成自编 STL 关联容器、哈希表、算法和 allocator 接入。代码位于 [stl_associative](../../Learning/05-STL-Associative/practice/stl_associative)。
 
 ## 已完成组件
 
@@ -40,9 +40,9 @@ allocator 把分配/释放从容器逻辑中拆出。当前实现完成接口接
 ## 构建验证
 
 ```powershell
-cmake -S CPP-Practice/stl_associative -B CPP-Practice/stl_associative/build
-cmake --build CPP-Practice/stl_associative/build --config Release
-.\CPP-Practice\stl_associative\build\Release\stl_associative_demo.exe
+cmake -S Learning/05-STL-Associative/practice/stl_associative -B Learning/05-STL-Associative/practice/stl_associative/build
+cmake --build Learning/05-STL-Associative/practice/stl_associative/build --config Release
+.\Learning\05-STL-Associative\practice\stl_associative\build\Release\stl_associative_demo.exe
 ```
 
 验证结果：全部 `[PASS]`。

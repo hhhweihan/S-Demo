@@ -2,7 +2,7 @@
 
 > **学习周期：** Day-022 ~ Day-028（约 8 小时）  
 > **核心产出：** `ScopeGuard`、`DEFER` 宏、`FileGuard`、Month 1 AddressSanitizer 扫描记录、Month 1 综合 benchmark、Month 2 衔接结论  
-> **代码位置：** `CPP-Practice/raii/`、`CPP-Practice/month1_benchmark/`、`CPP-Practice/memory_pool/`  
+> **代码位置：** [raii](../../Learning/01-内存管理/practice/raii)、[month1_benchmark](../../Learning/01-内存管理/practice/month1_benchmark)、[memory_pool](../../Learning/01-内存管理/practice/memory_pool)\
 > **完成状态：** 本周 7 天任务已完成；`git commit / push` 保留未执行
 
 ---
@@ -100,8 +100,8 @@ Week04 从这一天开始进入“验证阶段”。
 
 本次实际扫描的可执行资产主要有两组：
 
-1. `CPP-Practice/memory_pool/`
-2. `CPP-Practice/month1_benchmark/`
+1. [memory_pool](../../Learning/01-内存管理/practice/memory_pool)
+2. [month1_benchmark](../../Learning/01-内存管理/practice/month1_benchmark)
 
 也就是说，覆盖到了：
 
@@ -143,7 +143,7 @@ Week04 从这一天开始进入“验证阶段”。
 
 这一天新增了一个独立工程：
 
-- `CPP-Practice/month1_benchmark/`
+- [month1_benchmark](../../Learning/01-内存管理/practice/month1_benchmark)
 
 原因很现实：Week01 和 Week02 已经有可运行代码，但 Week03 主要还是学习计划和设计文档，缺少统一 benchmark 入口。所以需要一个单独程序，把 Month 1 的核心产出放进同一套计时框架：
 
@@ -265,11 +265,11 @@ Week04 则把这些能力真正闭环了：
 
 ### 4.1 本周新增代码
 
-- `CPP-Practice/raii/scope_guard.h`
-- `CPP-Practice/raii/file_guard.h`
-- `CPP-Practice/raii/main.cpp`
-- `CPP-Practice/month1_benchmark/smart_ptr.h`
-- `CPP-Practice/month1_benchmark/month1_benchmark.cpp`
+- [scope_guard.h](../../Learning/01-内存管理/practice/raii/scope_guard.h)
+- [file_guard.h](../../Learning/01-内存管理/practice/raii/file_guard.h)
+- [main.cpp](../../Learning/01-内存管理/practice/raii/main.cpp)
+- [smart_ptr.h](../../Learning/01-内存管理/practice/month1_benchmark/smart_ptr.h)
+- [month1_benchmark.cpp](../../Learning/01-内存管理/practice/month1_benchmark/month1_benchmark.cpp)
 
 ### 4.2 本周验证结果
 

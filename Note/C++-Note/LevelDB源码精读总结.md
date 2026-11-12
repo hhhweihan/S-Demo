@@ -2,7 +2,7 @@
 
 ## 月度目标回顾
 
-Month07 目标是理解 LevelDB 的核心写入路径，并把教学版 LSM 升级到崩溃安全版本。代码位于 `CPP-Practice/leveldb_mini/`。
+Month07 目标是理解 LevelDB 的核心写入路径，并把教学版 LSM 升级到崩溃安全版本。代码位于 [leveldb_mini](../../Learning/07-LevelDB/practice/leveldb_mini)。
 
 ## 已完成组件
 

@@ -84,5 +84,5 @@ jobs:
       - name: Check formatting
         run: |
           clang-format --version
-          files=$(find CPP-Practice -name '*.h' -o -name '*.cpp' | grep -v '/build')
+          files=$(find Learning -name '*.h' -o -name '*.cpp' -o -name '*.c' | grep -v '/build')
           clang-format --dry-run --Werror $files

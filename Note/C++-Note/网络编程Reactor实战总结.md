@@ -2,7 +2,7 @@
 
 ## 月度目标回顾
 
-Month08 目标是理解 Socket、Reactor、HTTP Server 和 RPC 基础。当前 Windows 环境无法直接执行 epoll/wrk/ASan，因此代码位于 `CPP-Practice/network_reactor/`，实现跨平台核心抽象和协议验证。
+Month08 目标是理解 Socket、Reactor、HTTP Server 和 RPC 基础。当前 Windows 环境无法直接执行 epoll/wrk/ASan，因此代码位于 [network_reactor](../../Learning/08-网络编程/practice/network_reactor)，实现跨平台核心抽象和协议验证。
 
 ## 已完成组件
 
@@ -47,9 +47,9 @@ wrk QPS、epoll ET、ASan/TSan 都需要 Linux/WSL2 和真实 socket server。�
 ## 构建验证
 
 ```powershell
-cmake -S CPP-Practice/network_reactor -B CPP-Practice/network_reactor/build
-cmake --build CPP-Practice/network_reactor/build --config Release
-.\CPP-Practice\network_reactor\build\Release\network_reactor_demo.exe
+cmake -S Learning/08-网络编程/practice/network_reactor -B Learning/08-网络编程/practice/network_reactor/build
+cmake --build Learning/08-网络编程/practice/network_reactor/build --config Release
+.\Learning\08-网络编程\practice\network_reactor\build\Release\network_reactor_demo.exe
 ```
 
 验证结果：全部 `[PASS]`。

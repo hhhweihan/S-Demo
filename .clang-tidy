@@ -15,5 +15,5 @@ Checks: >
   -cppcoreguidelines-owning-memory,
   -bugprone-easily-swappable-parameters
 WarningsAsErrors: ''
-HeaderFilterRegex: 'CPP-Practice/.*'
+HeaderFilterRegex: 'Learning/.*'
 FormatStyle: file

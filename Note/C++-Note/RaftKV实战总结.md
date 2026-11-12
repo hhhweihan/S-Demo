@@ -2,7 +2,7 @@
 
 ## 月度目标回顾
 
-Month12 完成 Mini Raft KV，并在重构后继续补上生产化和真实网络化两条关键能力。代码位于 `CPP-Practice/raft_kv/`。
+Month12 完成 Mini Raft KV，并在重构后继续补上生产化和真实网络化两条关键能力。代码位于 [raft_kv](../../Learning/12-RaftKV/practice/raft_kv)。
 
 ## 已完成模块
 

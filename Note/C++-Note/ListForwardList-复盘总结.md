@@ -42,8 +42,8 @@ Week15 实现节点式序列容器：`MyList<T>` 和 `MyForwardList<T>`。重点
 
 ## 本周代码落点
 
-- `CPP-Practice/stl_sequence/mini_stl.h`
-- `CPP-Practice/stl_sequence/main.cpp`
+- [mini_stl.h](../../Learning/04-STL-Sequence/practice/stl_sequence/mini_stl.h)
+- [main.cpp](../../Learning/04-STL-Sequence/practice/stl_sequence/main.cpp)
 
 ## 验证结果
 

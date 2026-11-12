@@ -1,6 +1,6 @@
 # Note
 
-这里存放学习笔记、阶段复盘和主题总结。当前与 C++ 后端主线最相关的是 [C++-Note](./C++-Note)，其中模块总结和阶段复盘对应 [CPP-Learning-Plan](../CPP-Learning-Plan/README.md) 和 [CPP-Practice](../CPP-Practice/README.md)。
+这里存放学习笔记、阶段复盘和主题总结。当前与 C++ 后端主线最相关的是 [C++-Note](./C++-Note)，其中模块总结和阶段复盘对应 [Learning](../Learning/README.md) 和 [Learning](../Learning/Practice-Index.md)。
 
 ## 目录说明
 
@@ -20,6 +20,6 @@
 
 ## 维护原则
 
-- Note 是复盘，不替代代码 README；实现细节和验证命令以 [CPP-Practice](../CPP-Practice/README.md) 为准。
-- 当 [CPP-Learning-Plan](../CPP-Learning-Plan/README.md) 或 [CPP-Practice](../CPP-Practice/README.md) 重构时，模块总结和阶段复盘需要同步更新，避免旧结论误导后续学习。
+- Note 是复盘，不替代代码 README；实现细节和验证命令以 [Learning](../Learning/Practice-Index.md) 为准。
+- 当 [Learning](../Learning/README.md) 或 [Learning](../Learning/Practice-Index.md) 重构时，模块总结和阶段复盘需要同步更新，避免旧结论误导后续学习。
 - 对真实验证、教学模拟和 proxy benchmark 要写清楚边界，不把学习验证包装成生产指标。

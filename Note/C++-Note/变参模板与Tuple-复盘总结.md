@@ -2,7 +2,7 @@
 
 > 学习周期：Day-064 ~ Day-070  
 > 核心产出：变参模板练习、折叠表达式、手写 `Tuple<Ts...>`、`get<N>`、`apply`、比较和打印  
-> 代码位置：`CPP-Practice/variadic_tuple/`
+> 代码位置：[variadic_tuple](../../Learning/03-模板泛型/practice/variadic_tuple)
 
 ---
 

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
-# Aggregate build for all CPP-Practice modules. Each module still builds standalone
-# (cmake -S CPP-Practice/<mod>); the test/sanitizer wiring is guarded so a standalone
+# Aggregate build for the implemented projects under Learning/*/practice.
+# Each project still builds standalone; the test/sanitizer wiring is guarded so a standalone
 # configure that lacks GTest::gtest_main / s_demo_apply_sanitizer just builds the demo.
 project(s_demo LANGUAGES CXX)
 
@@ -23,26 +23,26 @@ if(S_DEMO_BUILD_TESTS)
 endif()
 
 set(S_DEMO_MODULES
-    memory_pool
-    month1_benchmark
-    raii
-    thread_pool
-    lock_free
-    template_traits
-    variadic_tuple
-    type_erasure
-    advanced_templates
-    stl_sequence
-    stl_associative
-    async_logger
-    leveldb_mini
-    network_reactor
-    high_perf_net
-    coroutine_lib
-    rpc_framework
-    raft_kv
+    Learning/01-内存管理/practice/memory_pool
+    Learning/01-内存管理/practice/month1_benchmark
+    Learning/01-内存管理/practice/raii
+    Learning/02-并发编程/practice/thread_pool
+    Learning/02-并发编程/practice/lock_free
+    Learning/03-模板泛型/practice/template_traits
+    Learning/03-模板泛型/practice/variadic_tuple
+    Learning/03-模板泛型/practice/type_erasure
+    Learning/03-模板泛型/practice/advanced_templates
+    Learning/04-STL-Sequence/practice/stl_sequence
+    Learning/05-STL-Associative/practice/stl_associative
+    Learning/06-AsyncLogger/practice/async_logger
+    Learning/07-LevelDB/practice/leveldb_mini
+    Learning/08-网络编程/practice/network_reactor
+    Learning/09-HighPerfNet/practice/high_perf_net
+    Learning/10-Coroutine/practice/coroutine_lib
+    Learning/11-RPC/practice/rpc_framework
+    Learning/12-RaftKV/practice/raft_kv
 )
 
 foreach(module_name ${S_DEMO_MODULES})
-    add_subdirectory(CPP-Practice/${module_name})
+    add_subdirectory(${module_name})
 endforeach()

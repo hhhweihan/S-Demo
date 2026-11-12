@@ -2,7 +2,7 @@
 
 ## 月度目标回顾
 
-Month11 构建类 gRPC 的教学 RPC 框架。代码位于 `CPP-Practice/rpc_framework/`。
+Month11 构建类 gRPC 的教学 RPC 框架。代码位于 [rpc_framework](../../Learning/11-RPC/practice/rpc_framework)。
 
 ## 已完成组件
 
@@ -48,9 +48,9 @@ RPC 通常跑在 TCP 上，必须用长度字段或类似机制划分请求/响�
 ## 构建验证
 
 ```powershell
-cmake -S CPP-Practice/rpc_framework -B CPP-Practice/rpc_framework/build
-cmake --build CPP-Practice/rpc_framework/build --config Release
-.\CPP-Practice\rpc_framework\build\Release\rpc_framework_demo.exe
+cmake -S Learning/11-RPC/practice/rpc_framework -B Learning/11-RPC/practice/rpc_framework/build
+cmake --build Learning/11-RPC/practice/rpc_framework/build --config Release
+.\Learning\11-RPC\practice\rpc_framework\build\Release\rpc_framework_demo.exe
 ```
 
 验证结果：全部 `[PASS]`。

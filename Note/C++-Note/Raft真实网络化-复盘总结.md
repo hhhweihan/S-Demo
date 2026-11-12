@@ -14,7 +14,7 @@ Week50 给 RaftKV 补上仿真版验证不了的真实系统语义：每个节�
 - OS 进程被 SIGKILL 后没有析构、没有 atexit；
 - 重启进程只能依赖磁盘持久化状态。
 
-所以真实网络版选择在 `CPP-Practice/raft_kv/net/` 独立实现一条网络腿，不改动原有确定性仿真。
+所以真实网络版选择在 [net](../../Learning/12-RaftKV/practice/raft_kv/net) 独立实现一条网络腿，不改动原有确定性仿真。
 
 ## 网络层设计
 

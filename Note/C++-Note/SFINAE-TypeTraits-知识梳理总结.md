@@ -2,8 +2,8 @@
 
 > 学习周期：Day-057 ~ Day-063  
 > 核心主题：函数模板重载决议、SFINAE、`void_t`、`enable_if`、手写 `type_traits`、libc++ 源码对照  
-> 代码落点：`CPP-Practice/template_traits/`  
-> 核心实现：`CPP-Practice/template_traits/templates/my_type_traits.h`
+> 代码落点：[template_traits](../../Learning/03-模板泛型/practice/template_traits)\
+> 核心实现：[my_type_traits.h](../../Learning/03-模板泛型/practice/template_traits/templates/my_type_traits.h)
 
 ---
 
@@ -504,9 +504,9 @@ C++20 以后，很多 `enable_if` 场景可以用 concepts 表达得更清楚。
 验证命令：
 
 ```powershell
-cmake -S CPP-Practice/template_traits -B CPP-Practice/template_traits/build
-cmake --build CPP-Practice/template_traits/build --config Release
-.\CPP-Practice\template_traits\build\Release\template_traits_demo.exe
+cmake -S Learning/03-模板泛型/practice/template_traits -B Learning/03-模板泛型/practice/template_traits/build
+cmake --build Learning/03-模板泛型/practice/template_traits/build --config Release
+.\Learning\03-模板泛型\practice\template_traits\build\Release\template_traits_demo.exe
 ```
 
 关键完成标志：
